@@ -1,0 +1,101 @@
+{
+  "calculationRecords": [],
+  "todoItems": [
+    {
+      "id": 1,
+      "isDone": false,
+      "text": "Dhaniya (300g) - ₹30.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 2,
+      "isDone": false,
+      "text": "Chana (500g) - ₹50.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 3,
+      "isDone": false,
+      "text": "Tamatar (1kg) - ₹30.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 4,
+      "isDone": false,
+      "text": "Aaloo (250g) - ₹20.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 5,
+      "isDone": false,
+      "text": "Parmal (500g) - ₹30.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 6,
+      "isDone": false,
+      "text": "Kheera (1.5kg) - ₹60.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 7,
+      "isDone": false,
+      "text": "Podhina - ₹20.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 8,
+      "isDone": false,
+      "text": "Dhaniya (1) - ₹10.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 9,
+      "isDone": false,
+      "text": "Ghiya (750g) - ₹30.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 10,
+      "isDone": false,
+      "text": "Milk Gold (500g) - ₹33.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 11,
+      "isDone": false,
+      "text": "Fali (250g) - ₹15.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 12,
+      "isDone": false,
+      "text": "Bhindi (250g) - ₹20.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 13,
+      "isDone": false,
+      "text": "Aloo (1kg) - ₹20.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 14,
+      "isDone": false,
+      "text": "Munakka (200g) - ₹250.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 15,
+      "isDone": false,
+      "text": "Fan - ₹50.00",
+      "timestamp": 1741410000000
+    },
+    {
+      "id": 16,
+      "isDone": false,
+      "text": "Toast - ₹50.00",
+      "timestamp": 1741410000000
+    }
+  ]
+} 

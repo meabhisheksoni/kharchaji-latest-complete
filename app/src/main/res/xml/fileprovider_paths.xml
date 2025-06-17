@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- External storage directory -->
+    <external-files-path name="my_images" path="images/" />
+    
+    <!-- Downloads directory for backup files -->
+    <external-files-path name="my_downloads" path="Downloads/" />
+    
+    <!-- Internal storage directory -->
+    <files-path name="internal_images" path="images/" />
+    
+    <!-- Temp directory -->
+    <cache-path name="temp_images" path="." />
+    
+    <!-- Root directory of external storage -->
+    <external-path name="external" path="." />
+</paths> 

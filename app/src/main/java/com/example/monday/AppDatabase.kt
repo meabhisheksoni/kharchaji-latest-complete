@@ -5,10 +5,17 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [TodoItem::class, CalculationRecord::class], version = 4, exportSchema = false)
+@Database(
+    entities = [TodoItem::class, CalculationRecord::class],
+    version = 3,
+    exportSchema = false
+)
 @TypeConverters(CalculationRecordConverters::class)
 abstract class AppDatabase : RoomDatabase() {
+
     abstract fun todoDao(): TodoDao
 
     companion object {
@@ -20,12 +27,19 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "todo_database"
+                    "app_database"
                 )
-                .fallbackToDestructiveMigration()
+                .addMigrations(MIGRATION_2_3)
+                .fallbackToDestructiveMigration() // Added as a safety net
                 .build()
                 INSTANCE = instance
                 instance
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE todo_table ADD COLUMN imageUris TEXT")
             }
         }
     }

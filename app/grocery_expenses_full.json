@@ -1,0 +1,395 @@
+{
+  "calculationRecords": [],
+  "todoItems": [
+    {
+      "id": 1,
+      "isDone": false,
+      "text": "Ghee - ₹1800.00",
+      "timestamp": 1711152000000
+    },
+    {
+      "id": 2,
+      "isDone": false,
+      "text": "Kela (2kg) - ₹80.00",
+      "timestamp": 1711152000000
+    },
+    {
+      "id": 3,
+      "isDone": false,
+      "text": "Aaloo (2.5kg) - ₹63.00",
+      "timestamp": 1711152000000
+    },
+    {
+      "id": 4,
+      "isDone": false,
+      "text": "Tamatar (1) - ₹40.00",
+      "timestamp": 1711152000000
+    },
+    {
+      "id": 5,
+      "isDone": false,
+      "text": "Kheera (1) - ₹40.00",
+      "timestamp": 1711152000000
+    },
+    {
+      "id": 6,
+      "isDone": false,
+      "text": "Matar (0.5kg) - ₹30.00",
+      "timestamp": 1711152000000
+    },
+    {
+      "id": 7,
+      "isDone": false,
+      "text": "Bhindi (0.5kg) - ₹40.00",
+      "timestamp": 1711152000000
+    },
+    {
+      "id": 8,
+      "isDone": false,
+      "text": "Aata - ₹300.00",
+      "timestamp": 1711152000000
+    },
+    {
+      "id": 9,
+      "isDone": false,
+      "text": "Kaddu (1.320kg) - ₹55.00",
+      "timestamp": 1711411200000
+    },
+    {
+      "id": 10,
+      "isDone": false,
+      "text": "Mithai (1kg) - ₹420.00",
+      "timestamp": 1711411200000
+    },
+    {
+      "id": 11,
+      "isDone": false,
+      "text": "Paneer (500gm) - ₹140.00",
+      "timestamp": 1711411200000
+    },
+    {
+      "id": 12,
+      "isDone": false,
+      "text": "Paid to Shuban Eite Vala - ₹1800.00",
+      "timestamp": 1711670400000
+    },
+    {
+      "id": 13,
+      "isDone": false,
+      "text": "Water (2) - ₹20.00",
+      "timestamp": 1711670400000
+    },
+    {
+      "id": 14,
+      "isDone": false,
+      "text": "Priya recharge - ₹150.00",
+      "timestamp": 1711670400000
+    },
+    {
+      "id": 15,
+      "isDone": false,
+      "text": "Mistri recharge - ₹240.00",
+      "timestamp": 1711670400000
+    },
+    {
+      "id": 16,
+      "isDone": false,
+      "text": "Dahi - ₹72.00",
+      "timestamp": 1711670400000
+    },
+    {
+      "id": 17,
+      "isDone": false,
+      "text": "Priya cake - ₹40.00",
+      "timestamp": 1711670400000
+    },
+    {
+      "id": 18,
+      "isDone": false,
+      "text": "Petrol - ₹300.00",
+      "timestamp": 1711670400000
+    },
+    {
+      "id": 19,
+      "isDone": false,
+      "text": "Icecream - ₹20.00",
+      "timestamp": 1711670400000
+    },
+    {
+      "id": 20,
+      "isDone": false,
+      "text": "Water - ₹20.00",
+      "timestamp": 1711756800000
+    },
+    {
+      "id": 21,
+      "isDone": false,
+      "text": "Phone EMI - ₹3500.00",
+      "timestamp": 1711756800000
+    },
+    {
+      "id": 22,
+      "isDone": false,
+      "text": "Paid to Mukesh Yadav - ₹5000.00",
+      "timestamp": 1711843200000
+    },
+    {
+      "id": 23,
+      "isDone": false,
+      "text": "Payment to Ganesham Departmental And Bakers - ₹1124.00",
+      "timestamp": 1711843200000
+    },
+    {
+      "id": 24,
+      "isDone": false,
+      "text": "Tiles - ₹5050.00",
+      "timestamp": 1712016000000
+    },
+    {
+      "id": 25,
+      "isDone": false,
+      "text": "Dahi - ₹70.00",
+      "timestamp": 1712016000000
+    },
+    {
+      "id": 26,
+      "isDone": false,
+      "text": "Chach - ₹34.00",
+      "timestamp": 1712016000000
+    },
+    {
+      "id": 27,
+      "isDone": false,
+      "text": "Cylinder - ₹806.00",
+      "timestamp": 1712016000000
+    },
+    {
+      "id": 28,
+      "isDone": false,
+      "text": "Ganna juice (4 glass) - ₹60.00",
+      "timestamp": 1712275200000
+    },
+    {
+      "id": 29,
+      "isDone": false,
+      "text": "Dahi - ₹70.00",
+      "timestamp": 1712275200000
+    },
+    {
+      "id": 30,
+      "isDone": false,
+      "text": "Chach - ₹34.00",
+      "timestamp": 1712275200000
+    },
+    {
+      "id": 31,
+      "isDone": false,
+      "text": "Refined Oil - ₹110.00",
+      "timestamp": 1712275200000
+    },
+    {
+      "id": 32,
+      "isDone": false,
+      "text": "Cheeni (2 kg) - ₹86.00",
+      "timestamp": 1712275200000
+    },
+    {
+      "id": 33,
+      "isDone": false,
+      "text": "Aata (10kg) - ₹300.00",
+      "timestamp": 1712275200000
+    },
+    {
+      "id": 34,
+      "isDone": false,
+      "text": "Pears - ₹130.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 35,
+      "isDone": false,
+      "text": "Baniyan - ₹560.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 36,
+      "isDone": false,
+      "text": "Otg - ₹60.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 37,
+      "isDone": false,
+      "text": "Papad - ₹65.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 38,
+      "isDone": false,
+      "text": "Banana - ₹40.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 39,
+      "isDone": false,
+      "text": "Dahi - ₹72.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 40,
+      "isDone": false,
+      "text": "Namkeen - ₹200.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 41,
+      "isDone": false,
+      "text": "Kaju namkeen - ₹50.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 42,
+      "isDone": false,
+      "text": "Astar - ₹100.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 43,
+      "isDone": false,
+      "text": "Pen - ₹10.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 44,
+      "isDone": false,
+      "text": "Scarf - ₹100.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 45,
+      "isDone": false,
+      "text": "Biskit - ₹145.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 46,
+      "isDone": false,
+      "text": "Chappal - ₹450.00",
+      "timestamp": 1712448000000
+    },
+    {
+      "id": 47,
+      "isDone": false,
+      "text": "Dhaniya (300g) - ₹30.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 48,
+      "isDone": false,
+      "text": "Chana (500g) - ₹50.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 49,
+      "isDone": false,
+      "text": "Tamatar (1kg) - ₹30.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 50,
+      "isDone": false,
+      "text": "Aaloo (250g) - ₹20.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 51,
+      "isDone": false,
+      "text": "Parmal (500g) - ₹30.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 52,
+      "isDone": false,
+      "text": "Kheera (1.5kg) - ₹60.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 53,
+      "isDone": false,
+      "text": "Podhina - ₹20.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 54,
+      "isDone": false,
+      "text": "Dhaniya (1) - ₹10.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 55,
+      "isDone": false,
+      "text": "Ghiya (750g) - ₹30.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 56,
+      "isDone": false,
+      "text": "Milk Gold (500g) - ₹33.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 57,
+      "isDone": false,
+      "text": "Fali (250g) - ₹15.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 58,
+      "isDone": false,
+      "text": "Bhindi (250g) - ₹20.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 59,
+      "isDone": false,
+      "text": "Aloo (1kg) - ₹20.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 60,
+      "isDone": false,
+      "text": "Munakka (200g) - ₹250.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 61,
+      "isDone": false,
+      "text": "Fan - ₹50.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 62,
+      "isDone": false,
+      "text": "Toast - ₹50.00",
+      "timestamp": 1748812000000
+    },
+    {
+      "id": 63,
+      "isDone": false,
+      "text": "Water Bill (162/63) - ₹324.00",
+      "timestamp": 1749071200000
+    },
+    {
+      "id": 64,
+      "isDone": false,
+      "text": "Cylinder Book (1) - ₹856.50",
+      "timestamp": 1749071200000
+    },
+    {
+      "id": 65,
+      "isDone": false,
+      "text": "Petrol (Papa) - ₹150.00",
+      "timestamp": 1749071200000
+    }
+  ]
+} 
