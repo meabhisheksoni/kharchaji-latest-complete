@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import com.example.monday.ExpenseCategory
 import com.example.monday.TodoViewModel
 import com.example.monday.ui.components.DefaultCategories
+import com.example.monday.ui.components.DeleteCategoryConfirmDialog
+import com.example.monday.ui.components.EnhancedCategorySection
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,11 +35,18 @@ fun SettingsScreen(
     var showTertiaryCategories by remember { mutableStateOf(true) }
     
     var showEditCategoryDialog by remember { mutableStateOf<Triple<String, ExpenseCategory?, ExpenseCategory?>>(Triple("", null, null)) }
+    var showDeleteConfirmDialog by remember { mutableStateOf<Pair<ExpenseCategory?, String>?>(null) }
     
     // Get categories from view model's StateFlows
     val primaryCategories by viewModel.primaryCategories.collectAsState()
     val secondaryCategories by viewModel.secondaryCategories.collectAsState()
     val tertiaryCategories by viewModel.tertiaryCategories.collectAsState()
+    
+    // For showing snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Observe last action for undo availability
+    val lastCategoryAction by viewModel.lastCategoryAction.collectAsState()
     
     // Load visibility preferences
     LaunchedEffect(Unit) {
@@ -54,9 +63,29 @@ fun SettingsScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    // Show undo button only if there's a last action to undo
+                    if (lastCategoryAction != null) {
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    viewModel.undoLastCategoryAction()
+                                    snackbarHostState.showSnackbar("Action undone")
+                                }
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Undo, 
+                                contentDescription = "Undo Last Category Change",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -155,7 +184,7 @@ fun SettingsScreen(
             // Primary Categories Management
             if (showPrimaryCategories) {
                 item {
-                    CategorySection(
+                    EnhancedCategorySection(
                         title = "Primary Categories (People)",
                         categories = primaryCategories,
                         onAddCategory = {
@@ -165,8 +194,20 @@ fun SettingsScreen(
                             showEditCategoryDialog = Triple("primary", category, null)
                         },
                         onDeleteCategory = { category ->
-                            scope.launch {
-                                viewModel.deleteCategory(category, "primary")
+                            showDeleteConfirmDialog = Pair(category, "primary")
+                        },
+                        onMoveCategory = { category, moveUp ->
+                            val currentIndex = primaryCategories.indexOf(category)
+                            val newIndex = if (moveUp) {
+                                maxOf(0, currentIndex - 1)
+                            } else {
+                                minOf(primaryCategories.size - 1, currentIndex + 1)
+                            }
+                            
+                            if (currentIndex != newIndex) {
+                                scope.launch {
+                                    viewModel.moveCategory(category, "primary", newIndex)
+                                }
                             }
                         }
                     )
@@ -176,7 +217,7 @@ fun SettingsScreen(
             // Secondary Categories Management
             if (showSecondaryCategories) {
                 item {
-                    CategorySection(
+                    EnhancedCategorySection(
                         title = "Secondary Categories (Purpose)",
                         categories = secondaryCategories,
                         onAddCategory = {
@@ -186,8 +227,20 @@ fun SettingsScreen(
                             showEditCategoryDialog = Triple("secondary", category, null)
                         },
                         onDeleteCategory = { category ->
-                            scope.launch {
-                                viewModel.deleteCategory(category, "secondary")
+                            showDeleteConfirmDialog = Pair(category, "secondary")
+                        },
+                        onMoveCategory = { category, moveUp ->
+                            val currentIndex = secondaryCategories.indexOf(category)
+                            val newIndex = if (moveUp) {
+                                maxOf(0, currentIndex - 1)
+                            } else {
+                                minOf(secondaryCategories.size - 1, currentIndex + 1)
+                            }
+                            
+                            if (currentIndex != newIndex) {
+                                scope.launch {
+                                    viewModel.moveCategory(category, "secondary", newIndex)
+                                }
                             }
                         }
                     )
@@ -197,7 +250,7 @@ fun SettingsScreen(
             // Tertiary Categories Management
             if (showTertiaryCategories) {
                 item {
-                    CategorySection(
+                    EnhancedCategorySection(
                         title = "Tertiary Categories (Type)",
                         categories = tertiaryCategories,
                         onAddCategory = {
@@ -207,8 +260,20 @@ fun SettingsScreen(
                             showEditCategoryDialog = Triple("tertiary", category, null)
                         },
                         onDeleteCategory = { category ->
-                            scope.launch {
-                                viewModel.deleteCategory(category, "tertiary")
+                            showDeleteConfirmDialog = Pair(category, "tertiary")
+                        },
+                        onMoveCategory = { category, moveUp ->
+                            val currentIndex = tertiaryCategories.indexOf(category)
+                            val newIndex = if (moveUp) {
+                                maxOf(0, currentIndex - 1)
+                            } else {
+                                minOf(tertiaryCategories.size - 1, currentIndex + 1)
+                            }
+                            
+                            if (currentIndex != newIndex) {
+                                scope.launch {
+                                    viewModel.moveCategory(category, "tertiary", newIndex)
+                                }
                             }
                         }
                     )
@@ -237,10 +302,16 @@ fun SettingsScreen(
                     if (categoryToEdit != null) {
                         // This is an edit
                         viewModel.updateCategory(categoryToEdit, newCategory, categoryType)
+                        
+                        // Show success message if name was changed
+                        if (categoryToEdit.name != name) {
+                            val message = "Category '${categoryToEdit.name}' renamed to '$name' throughout the app"
+                            snackbarHostState.showSnackbar(message)
+                        }
                     } else {
                         // This is an add
-                        val updatedList = currentCategories + newCategory
-                        viewModel.saveCategories(categoryType, updatedList)
+                        viewModel.addCategory(newCategory, categoryType)
+                        snackbarHostState.showSnackbar("Category '$name' added")
                     }
                 }
                 
@@ -248,99 +319,26 @@ fun SettingsScreen(
             }
         )
     }
-}
-
-@Composable
-fun CategorySection(
-    title: String,
-    categories: List<ExpenseCategory>,
-    onAddCategory: () -> Unit,
-    onEditCategory: (ExpenseCategory) -> Unit,
-    onDeleteCategory: (ExpenseCategory) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium
-            )
-            
-            IconButton(onClick = onAddCategory) {
-                Icon(Icons.Default.Add, contentDescription = "Add Category")
-            }
-        }
-        
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                categories.forEach { category ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = category.icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        
-                        Spacer(modifier = Modifier.width(16.dp))
-                        
-                        Text(
-                            text = category.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f)
-                        )
-                        
-                        IconButton(
-                            onClick = { onEditCategory(category) },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Edit,
-                                contentDescription = "Edit",
-                                modifier = Modifier.size(20.dp)
-                            )
+    
+    // Delete Confirmation Dialog
+    showDeleteConfirmDialog?.let { (category, type) ->
+        if (category != null) {
+            DeleteCategoryConfirmDialog(
+                category = category,
+                onDismiss = { showDeleteConfirmDialog = null },
+                onConfirmDelete = { removeFromExpenses ->
+                    scope.launch {
+                        viewModel.deleteCategoryWithOptions(category, type, removeFromExpenses)
+                        val message = if (removeFromExpenses) {
+                            "Category '${category.name}' removed from all expenses"
+                        } else {
+                            "Category '${category.name}' removed from category list only"
                         }
-                        
-                        IconButton(
-                            onClick = { onDeleteCategory(category) },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
+                        snackbarHostState.showSnackbar(message)
                     }
+                    showDeleteConfirmDialog = null
                 }
-                
-                if (categories.isEmpty()) {
-                    Text(
-                        text = "No categories added yet",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-            }
+            )
         }
     }
 }

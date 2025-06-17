@@ -32,8 +32,12 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     val selectedDate: StateFlow<LocalDate> = _selectedDate
 
-    private val _undoableDeletedItems = MutableStateFlow<List<TodoItem>>(emptyList())
-    val undoableDeletedItems: StateFlow<List<TodoItem>> = _undoableDeletedItems
+    // Modify to store items by date
+    private val _undoableDeletedItemsByDate = MutableStateFlow<Map<LocalDate, List<TodoItem>>>(emptyMap())
+    
+    // Computed property to get undoable items only for the currently selected date
+    private val _currentDateUndoItems = MutableStateFlow<List<TodoItem>>(emptyList())
+    val undoableDeletedItems: StateFlow<List<TodoItem>> = _currentDateUndoItems
     
     private val imageUpdateMutex = Mutex()
 
@@ -47,6 +51,18 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     private val _tertiaryCategories = MutableStateFlow<List<ExpenseCategory>>(emptyList())
     val tertiaryCategories: StateFlow<List<ExpenseCategory>> = _tertiaryCategories
 
+    // Class-level variables to store the last category action for undo functionality
+    private val _lastCategoryAction = MutableStateFlow<CategoryAction?>(null)
+    val lastCategoryAction: StateFlow<CategoryAction?> = _lastCategoryAction
+    
+    // Sealed class for representing category actions for undo functionality
+    sealed class CategoryAction {
+        data class Added(val category: ExpenseCategory, val type: String) : CategoryAction()
+        data class Edited(val oldCategory: ExpenseCategory, val newCategory: ExpenseCategory, val type: String) : CategoryAction()
+        data class Deleted(val category: ExpenseCategory, val type: String, val affectedItems: List<TodoItem>, val affectedRecords: List<CalculationRecord>) : CategoryAction()
+        data class Moved(val category: ExpenseCategory, val type: String, val oldPosition: Int, val newPosition: Int) : CategoryAction()
+    }
+
     init {
         val todoDao = AppDatabase.getDatabase(application).todoDao()
         repository = TodoRepository(todoDao)
@@ -57,6 +73,13 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Load categories on init
         loadAllCategories()
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(_undoableDeletedItemsByDate, _selectedDate) { itemsByDate, date ->
+                itemsByDate[date] ?: emptyList()
+            }.collect { items ->
+                _currentDateUndoItems.value = items
+            }
+        }
     }
 
     private fun loadAllCategories() {
@@ -85,13 +108,13 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun removeItem(item: TodoItem) = viewModelScope.launch {
-        _undoableDeletedItems.value = listOf(item) + _undoableDeletedItems.value
+        addDeletedItemForCurrentDate(item)
         repository.delete(item)
     }
 
     fun deleteSelectedItemsAndEnableUndo(itemsToDelete: List<TodoItem>) = viewModelScope.launch {
         if (itemsToDelete.isEmpty()) return@launch
-        _undoableDeletedItems.value = itemsToDelete.reversed() + _undoableDeletedItems.value
+        addDeletedItemsForCurrentDate(itemsToDelete)
         val idsToDelete = itemsToDelete.map { it.id }
         repository.deleteItemsByIds(idsToDelete)
     }
@@ -104,12 +127,19 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteAllItems() = viewModelScope.launch {
         repository.deleteAll()
-        _undoableDeletedItems.value = emptyList()
+        // Clear all undo history for all dates
+        _undoableDeletedItemsByDate.value = emptyMap()
     }
 
     fun deleteItemById(itemId: Int) = viewModelScope.launch {
         repository.deleteItemById(itemId)
-        _undoableDeletedItems.value = emptyList()
+        
+        // Remove the item from all dates' undo lists
+        val updatedMap = _undoableDeletedItemsByDate.value.mapValues { (_, items) ->
+            items.filter { it.id != itemId }
+        }.filter { (_, items) -> items.isNotEmpty() } // Keep only dates with items
+        
+        _undoableDeletedItemsByDate.value = updatedMap
     }
 
     /**
@@ -208,7 +238,7 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        _undoableDeletedItems.value = emptyList()
+        _undoableDeletedItemsByDate.value = _undoableDeletedItemsByDate.value.mapValues { it.value.filter { it.id != -1 } }
         updateSelectedDate(targetDate)
         Log.d("CategoryFix", "==== MERGE COMPLETED ====")
     }
@@ -271,7 +301,11 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         Log.d("CategoryFix", "Finished inserting ${newTodoItems.size} new items.")
 
         // Step 4: Update UI state
-        _undoableDeletedItems.value = emptyList()
+        // Clear undo for target date after clearing and setting
+        val targetDateMap = _undoableDeletedItemsByDate.value.toMutableMap()
+        targetDateMap.remove(targetDate)
+        _undoableDeletedItemsByDate.value = targetDateMap
+        
         updateSelectedDate(targetDate)
         Log.d("CategoryFix", "==== CLEAR AND SET COMPLETED ====")
     }
@@ -298,16 +332,50 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         return todoItem.text.trim()
     }
 
+    // Helper method to add deleted items for the current date
+    private fun addDeletedItemForCurrentDate(item: TodoItem) {
+        val currentDate = _selectedDate.value
+        val currentItems = _undoableDeletedItemsByDate.value[currentDate] ?: emptyList()
+        _undoableDeletedItemsByDate.value = _undoableDeletedItemsByDate.value + 
+            mapOf(currentDate to (listOf(item) + currentItems))
+    }
+
+    // Helper method to add multiple deleted items for the current date
+    private fun addDeletedItemsForCurrentDate(items: List<TodoItem>) {
+        if (items.isEmpty()) return
+        val currentDate = _selectedDate.value
+        val currentItems = _undoableDeletedItemsByDate.value[currentDate] ?: emptyList()
+        _undoableDeletedItemsByDate.value = _undoableDeletedItemsByDate.value + 
+            mapOf(currentDate to (items.reversed() + currentItems))
+    }
+
+    // Update the undo functionality for current date
     fun undoLastDelete() = viewModelScope.launch {
-        if (_undoableDeletedItems.value.isNotEmpty()) {
-            val itemToRestore = _undoableDeletedItems.value.first()
+        val currentDate = _selectedDate.value
+        val itemsForCurrentDate = _undoableDeletedItemsByDate.value[currentDate] ?: emptyList()
+        
+        if (itemsForCurrentDate.isNotEmpty()) {
+            val itemToRestore = itemsForCurrentDate.first()
             repository.insert(itemToRestore)
-            _undoableDeletedItems.value = _undoableDeletedItems.value.drop(1)
+            
+            // Update the list for current date
+            val updatedItems = itemsForCurrentDate.drop(1)
+            val updatedMap = _undoableDeletedItemsByDate.value.toMutableMap()
+            if (updatedItems.isEmpty()) {
+                updatedMap.remove(currentDate)
+            } else {
+                updatedMap[currentDate] = updatedItems
+            }
+            _undoableDeletedItemsByDate.value = updatedMap
         }
     }
 
+    // Clear deleted items for current date
     fun clearLastDeletedItem() = viewModelScope.launch {
-        _undoableDeletedItems.value = emptyList()
+        val currentDate = _selectedDate.value
+        val updatedMap = _undoableDeletedItemsByDate.value.toMutableMap()
+        updatedMap.remove(currentDate)
+        _undoableDeletedItemsByDate.value = updatedMap
     }
 
     // CalculationRecord methods
@@ -1172,19 +1240,56 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun updateCategory(oldCategory: ExpenseCategory, newCategory: ExpenseCategory, type: String) {
-        // 1. Update all items using the old category name
+        // Store the action for potential undo
+        _lastCategoryAction.value = CategoryAction.Edited(oldCategory, newCategory, type)
+        
+        // Continue with normal update process...
+        // 1. Update all TodoItems using the old category name
         withContext(Dispatchers.IO) {
             val allItems = repository.getAllItems()
             val itemsToUpdate = allItems.filter { it.categories?.contains(oldCategory.name) == true }
+            
+            Log.d("CategoryUpdate", "Found ${itemsToUpdate.size} TodoItems with category '${oldCategory.name}' to update")
 
             for (item in itemsToUpdate) {
                 val newCategories = item.categories?.map { if (it == oldCategory.name) newCategory.name else it }
                 val updatedItem = item.copy(categories = newCategories)
                 repository.update(updatedItem)
+                Log.d("CategoryUpdate", "Updated TodoItem ID: ${item.id}")
             }
+            
+            // 2. Update all CalculationRecords that have RecordItems with this category
+            val allRecords = repository.getAllCalculationRecordsForExport()
+            var updatedRecordsCount = 0
+            
+            for (record in allRecords) {
+                var recordNeedsUpdate = false
+                val updatedItems = record.items.map { recordItem ->
+                    if (recordItem.categories?.contains(oldCategory.name) == true) {
+                        // Update the categories in this RecordItem
+                        recordNeedsUpdate = true
+                        val newRecordCategories = recordItem.categories.map { 
+                            if (it == oldCategory.name) newCategory.name else it 
+                        }
+                        recordItem.copy(categories = newRecordCategories)
+                    } else {
+                        recordItem
+                    }
+                }
+                
+                // If any items in this record were updated, save the record
+                if (recordNeedsUpdate) {
+                    val updatedRecord = record.copy(items = updatedItems)
+                    repository.updateCalculationRecord(updatedRecord)
+                    updatedRecordsCount++
+                    Log.d("CategoryUpdate", "Updated CalculationRecord ID: ${record.id}")
+                }
+            }
+            
+            Log.d("CategoryUpdate", "Updated a total of $updatedRecordsCount calculation records")
         }
 
-        // 2. Update the category list in SharedPreferences
+        // 3. Update the category list in SharedPreferences
         val currentCategories = when (type) {
             "primary" -> _primaryCategories.value.toMutableList()
             "secondary" -> _secondaryCategories.value.toMutableList()
@@ -1196,11 +1301,69 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         if (index != -1) {
             currentCategories[index] = newCategory
             saveCategories(type, currentCategories)
+            Log.d("CategoryUpdate", "Updated category in preferences: ${oldCategory.name} -> ${newCategory.name}")
         }
     }
 
     suspend fun deleteCategory(categoryToDelete: ExpenseCategory, type: String) {
-        // 1. Remove the category from the list in SharedPreferences
+        // 1. Remove the category from all TodoItems that use it
+        withContext(Dispatchers.IO) {
+            val allItems = repository.getAllItems()
+            val itemsToUpdate = allItems.filter { it.categories?.contains(categoryToDelete.name) == true }
+            
+            Log.d("CategoryDelete", "Found ${itemsToUpdate.size} TodoItems with category '${categoryToDelete.name}' to update")
+            
+            for (item in itemsToUpdate) {
+                // Remove this category from the item's category list
+                val updatedCategories = item.categories?.filter { it != categoryToDelete.name }
+                
+                // Recalculate category type flags
+                val (hasPrimary, hasSecondary, hasTertiary) = if (updatedCategories.isNullOrEmpty()) {
+                    Triple(false, false, false)
+                } else {
+                    determineCategoryTypes(updatedCategories)
+                }
+                
+                val updatedItem = item.copy(
+                    categories = updatedCategories,
+                    hasPrimaryCategory = hasPrimary,
+                    hasSecondaryCategory = hasSecondary,
+                    hasTertiaryCategory = hasTertiary
+                )
+                repository.update(updatedItem)
+                Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from TodoItem ID: ${item.id}")
+            }
+            
+            // 2. Remove the category from all CalculationRecords that use it
+            val allRecords = repository.getAllCalculationRecordsForExport()
+            var updatedRecordsCount = 0
+            
+            for (record in allRecords) {
+                var recordNeedsUpdate = false
+                val updatedItems = record.items.map { recordItem ->
+                    if (recordItem.categories?.contains(categoryToDelete.name) == true) {
+                        // Remove this category from the RecordItem
+                        recordNeedsUpdate = true
+                        val updatedCategories = recordItem.categories.filter { it != categoryToDelete.name }
+                        recordItem.copy(categories = if (updatedCategories.isEmpty()) null else updatedCategories)
+                    } else {
+                        recordItem
+                    }
+                }
+                
+                // If any items in this record were updated, save the record
+                if (recordNeedsUpdate) {
+                    val updatedRecord = record.copy(items = updatedItems)
+                    repository.updateCalculationRecord(updatedRecord)
+                    updatedRecordsCount++
+                    Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from CalculationRecord ID: ${record.id}")
+                }
+            }
+            
+            Log.d("CategoryDelete", "Updated a total of $updatedRecordsCount calculation records")
+        }
+
+        // 3. Remove the category from the SharedPreferences list
         val currentCategories = when (type) {
             "primary" -> _primaryCategories.value.toMutableList()
             "secondary" -> _secondaryCategories.value.toMutableList()
@@ -1209,7 +1372,278 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (currentCategories.remove(categoryToDelete)) {
             saveCategories(type, currentCategories)
+            Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from preferences")
+            
+            // Store this action for potential undo
+            _lastCategoryAction.value = CategoryAction.Deleted(
+                category = categoryToDelete,
+                type = type,
+                affectedItems = emptyList(),
+                affectedRecords = emptyList()
+            )
         }
+    }
+    
+    // Method to update the order of categories (move up/down)
+    suspend fun moveCategory(category: ExpenseCategory, type: String, newPosition: Int) {
+        val currentCategories = when (type) {
+            "primary" -> _primaryCategories.value.toMutableList()
+            "secondary" -> _secondaryCategories.value.toMutableList()
+            "tertiary" -> _tertiaryCategories.value.toMutableList()
+            else -> return
+        }
+        
+        val currentPosition = currentCategories.indexOf(category)
+        if (currentPosition == -1 || currentPosition == newPosition || 
+            newPosition < 0 || newPosition >= currentCategories.size) {
+            return  // Invalid operation
+        }
+        
+        // Store the current position for undo
+        _lastCategoryAction.value = CategoryAction.Moved(
+            category = category,
+            type = type,
+            oldPosition = currentPosition,
+            newPosition = newPosition
+        )
+        
+        // Perform the move
+        currentCategories.removeAt(currentPosition)
+        currentCategories.add(newPosition, category)
+        
+        // Save the reordered list
+        saveCategories(type, currentCategories)
+        Log.d("CategoryMove", "Moved category '${category.name}' from position $currentPosition to $newPosition")
+    }
+
+    // Add method to record category additions
+    suspend fun addCategory(category: ExpenseCategory, type: String) {
+        val currentCategories = when (type) {
+            "primary" -> _primaryCategories.value.toMutableList()
+            "secondary" -> _secondaryCategories.value.toMutableList()
+            "tertiary" -> _tertiaryCategories.value.toMutableList()
+            else -> mutableListOf()
+        }
+        
+        currentCategories.add(category)
+        saveCategories(type, currentCategories)
+        
+        // Store the action for potential undo
+        _lastCategoryAction.value = CategoryAction.Added(category, type)
+        
+        Log.d("CategoryAdd", "Added category '${category.name}' to $type categories")
+    }
+
+    // Method to check if there are undoable items for the current date
+    fun hasUndoableItemsForCurrentDate(): Boolean {
+        val currentDate = _selectedDate.value
+        return (_undoableDeletedItemsByDate.value[currentDate]?.isNotEmpty() == true)
+    }
+
+    // Method to undo the last category action
+    suspend fun undoLastCategoryAction() {
+        val action = _lastCategoryAction.value ?: return
+        
+        when (action) {
+            is CategoryAction.Added -> {
+                // Reverse the add by removing the category
+                val currentCategories = when (action.type) {
+                    "primary" -> _primaryCategories.value.toMutableList()
+                    "secondary" -> _secondaryCategories.value.toMutableList()
+                    "tertiary" -> _tertiaryCategories.value.toMutableList()
+                    else -> mutableListOf()
+                }
+                currentCategories.remove(action.category)
+                saveCategories(action.type, currentCategories)
+                Log.d("CategoryUndo", "Undid addition of category '${action.category.name}'")
+            }
+            is CategoryAction.Edited -> {
+                // Reverse the edit by restoring the old version
+                updateCategory(action.newCategory, action.oldCategory, action.type)
+                Log.d("CategoryUndo", "Undid edit of category '${action.newCategory.name}' back to '${action.oldCategory.name}'")
+            }
+            is CategoryAction.Deleted -> {
+                // Restore the category to preferences
+                val currentCategories = when (action.type) {
+                    "primary" -> _primaryCategories.value.toMutableList()
+                    "secondary" -> _secondaryCategories.value.toMutableList()
+                    "tertiary" -> _tertiaryCategories.value.toMutableList()
+                    else -> mutableListOf()
+                }
+                currentCategories.add(action.category)
+                saveCategories(action.type, currentCategories)
+                
+                // Restore the category to all affected items
+                withContext(Dispatchers.IO) {
+                    for (item in action.affectedItems) {
+                        val updatedCategories = (item.categories ?: emptyList()) + action.category.name
+                        val (hasPrimary, hasSecondary, hasTertiary) = determineCategoryTypes(updatedCategories)
+                        val updatedItem = item.copy(
+                            categories = updatedCategories,
+                            hasPrimaryCategory = hasPrimary,
+                            hasSecondaryCategory = hasSecondary,
+                            hasTertiaryCategory = hasTertiary
+                        )
+                        repository.update(updatedItem)
+                    }
+                    
+                    // Restore the category to all affected records
+                    for (record in action.affectedRecords) {
+                        var recordNeedsUpdate = false
+                        val updatedItems = record.items.map { recordItem ->
+                            if (recordItem.categories != null) {
+                                recordNeedsUpdate = true
+                                recordItem.copy(categories = recordItem.categories + action.category.name)
+                            } else {
+                                recordNeedsUpdate = true
+                                recordItem.copy(categories = listOf(action.category.name))
+                            }
+                        }
+                        
+                        if (recordNeedsUpdate) {
+                            val updatedRecord = record.copy(items = updatedItems)
+                            repository.updateCalculationRecord(updatedRecord)
+                        }
+                    }
+                }
+                
+                Log.d("CategoryUndo", "Undid deletion of category '${action.category.name}'")
+            }
+            is CategoryAction.Moved -> {
+                // Reverse the move operation
+                val currentCategories = when (action.type) {
+                    "primary" -> _primaryCategories.value.toMutableList()
+                    "secondary" -> _secondaryCategories.value.toMutableList()
+                    "tertiary" -> _tertiaryCategories.value.toMutableList()
+                    else -> mutableListOf()
+                }
+                
+                if (currentCategories.remove(action.category)) {
+                    val targetPosition = if (action.oldPosition < currentCategories.size)
+                        action.oldPosition else currentCategories.size
+                    currentCategories.add(targetPosition, action.category)
+                    saveCategories(action.type, currentCategories)
+                    Log.d("CategoryUndo", "Undid move of category '${action.category.name}' from position ${action.newPosition} back to ${action.oldPosition}")
+                }
+            }
+        }
+        
+        // Clear the last action after undoing
+        _lastCategoryAction.value = null
+    }
+
+    // Enhanced delete category method with options
+    suspend fun deleteCategoryWithOptions(
+        categoryToDelete: ExpenseCategory, 
+        type: String, 
+        removeFromExpenses: Boolean
+    ) {
+        // Store affected items and records for undo functionality
+        val affectedItems: MutableList<TodoItem> = mutableListOf()
+        val affectedRecords: MutableList<CalculationRecord> = mutableListOf()
+        
+        if (removeFromExpenses) {
+            // Remove from all expenses (current behavior)
+            withContext(Dispatchers.IO) {
+                // 1. Find and update TodoItems
+                val allItems = repository.getAllItems()
+                val itemsToUpdate = allItems.filter { it.categories?.contains(categoryToDelete.name) == true }
+                
+                Log.d("CategoryDelete", "Found ${itemsToUpdate.size} TodoItems with category '${categoryToDelete.name}' to update")
+                
+                for (item in itemsToUpdate) {
+                    // Save the original item for undo
+                    affectedItems.add(item)
+                    
+                    // Remove this category from the item's category list
+                    val updatedCategories = item.categories?.filter { it != categoryToDelete.name }
+                    
+                    // Recalculate category type flags
+                    val (hasPrimary, hasSecondary, hasTertiary) = if (updatedCategories.isNullOrEmpty()) {
+                        Triple(false, false, false)
+                    } else {
+                        determineCategoryTypes(updatedCategories)
+                    }
+                    
+                    val updatedItem = item.copy(
+                        categories = updatedCategories,
+                        hasPrimaryCategory = hasPrimary,
+                        hasSecondaryCategory = hasSecondary,
+                        hasTertiaryCategory = hasTertiary
+                    )
+                    repository.update(updatedItem)
+                    Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from TodoItem ID: ${item.id}")
+                }
+                
+                // 2. Find and update CalculationRecords
+                val allRecords = repository.getAllCalculationRecordsForExport()
+                var updatedRecordsCount = 0
+                
+                for (record in allRecords) {
+                    var recordNeedsUpdate = false
+                    val updatedItems = record.items.map { recordItem ->
+                        if (recordItem.categories?.contains(categoryToDelete.name) == true) {
+                            // Mark record as affected for undo
+                            if (!recordNeedsUpdate) {
+                                affectedRecords.add(record)
+                            }
+                            
+                            // Remove this category from the RecordItem
+                            recordNeedsUpdate = true
+                            val updatedCategories = recordItem.categories.filter { it != categoryToDelete.name }
+                            recordItem.copy(categories = if (updatedCategories.isEmpty()) null else updatedCategories)
+                        } else {
+                            recordItem
+                        }
+                    }
+                    
+                    // If any items in this record were updated, save the record
+                    if (recordNeedsUpdate) {
+                        val updatedRecord = record.copy(items = updatedItems)
+                        repository.updateCalculationRecord(updatedRecord)
+                        updatedRecordsCount++
+                        Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from CalculationRecord ID: ${record.id}")
+                    }
+                }
+                
+                Log.d("CategoryDelete", "Updated a total of $updatedRecordsCount calculation records")
+            }
+        }
+
+        // 3. Remove the category from the SharedPreferences list
+        val currentCategories = when (type) {
+            "primary" -> _primaryCategories.value.toMutableList()
+            "secondary" -> _secondaryCategories.value.toMutableList()
+            "tertiary" -> _tertiaryCategories.value.toMutableList()
+            else -> mutableListOf()
+        }
+        if (currentCategories.remove(categoryToDelete)) {
+            saveCategories(type, currentCategories)
+            Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from preferences")
+            
+            // Store this action for potential undo
+            _lastCategoryAction.value = CategoryAction.Deleted(
+                category = categoryToDelete,
+                type = type,
+                affectedItems = affectedItems,
+                affectedRecords = affectedRecords
+            )
+        }
+    }
+
+    // Get undoable deleted items by date for export
+    fun getUndoableDeletedItemsByDate(): Map<LocalDate, List<TodoItem>> {
+        return _undoableDeletedItemsByDate.value
+    }
+
+    // Restore undoable deleted items by date from import
+    fun restoreUndoableDeletedItemsByDate(undoableItemsByDate: Map<LocalDate, List<TodoItem>>) {
+        _undoableDeletedItemsByDate.value = undoableItemsByDate
+    }
+
+    // Set last category action (for import/restore)
+    fun setLastCategoryAction(action: CategoryAction) {
+        _lastCategoryAction.value = action
     }
 }
 

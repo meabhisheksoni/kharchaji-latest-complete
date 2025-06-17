@@ -39,7 +39,9 @@ data class AppBackup(
     val recentPrimaryCategory: String? = null,
     val recentSecondaryCategory: String? = null,
     val recentTertiaryCategory: String? = null,
-    val itemOrder: Map<Int, Int>? = null
+    val itemOrder: Map<Int, Int>? = null,
+    val undoableDeletedItemsByDate: Map<String, List<TodoItem>>? = null, // Add undoable deleted items by date
+    val lastCategoryAction: TodoViewModel.CategoryAction? = null // Add last category action for undo
 )
 
 fun exportBackup(context: Context, todoViewModel: TodoViewModel) {
@@ -54,6 +56,12 @@ fun exportBackup(context: Context, todoViewModel: TodoViewModel) {
             val allExpenses = withContext(Dispatchers.IO) { todoViewModel.getAllExpensesForExport() }
             val allRecords = withContext(Dispatchers.IO) { todoViewModel.getAllCalculationRecordsForExport() }
             val itemOrder = allExpenses.mapIndexed { index, item -> item.id to index }.toMap()
+            
+            // Get undoable deleted items by date
+            val undoableDeletedItems = todoViewModel.getUndoableDeletedItemsByDate()
+            
+            // Convert LocalDate keys to strings for JSON serialization
+            val undoableDeletedItemsAsStrings = undoableDeletedItems.mapKeys { it.key.toString() }
 
             if (allExpenses.isEmpty() && allRecords.isEmpty()) {
                 Toast.makeText(context, "No data to export", Toast.LENGTH_SHORT).show()
@@ -62,6 +70,7 @@ fun exportBackup(context: Context, todoViewModel: TodoViewModel) {
             
             // Log the data being exported
             Log.d("ExportBackup", "Exporting ${allExpenses.size} expenses and ${allRecords.size} records")
+            Log.d("ExportBackup", "Exporting undoable deleted items for ${undoableDeletedItems.size} dates")
             
             val backupData = AppBackup(
                 todoItems = allExpenses,
@@ -76,7 +85,9 @@ fun exportBackup(context: Context, todoViewModel: TodoViewModel) {
                 recentPrimaryCategory = todoViewModel.getRecentlySelectedCategory("primary"),
                 recentSecondaryCategory = todoViewModel.getRecentlySelectedCategory("secondary"),
                 recentTertiaryCategory = todoViewModel.getRecentlySelectedCategory("tertiary"),
-                itemOrder = itemOrder
+                itemOrder = itemOrder,
+                undoableDeletedItemsByDate = undoableDeletedItemsAsStrings,
+                lastCategoryAction = todoViewModel.lastCategoryAction.value
             )
             val jsonString = gson.toJson(backupData)
 
@@ -390,6 +401,30 @@ private fun importZipBackup(context: Context, uri: Uri, todoViewModel: TodoViewM
                 backupData.recentTertiaryCategory?.let {
                     todoViewModel.saveRecentlySelectedCategory("tertiary", it)
                 }
+                
+                // Restore undoable deleted items by date if available
+                backupData.undoableDeletedItemsByDate?.let { undoableItemsMap ->
+                    // Convert string keys back to LocalDate
+                    val undoableItemsByDate = undoableItemsMap.mapKeys { entry ->
+                        try {
+                            LocalDate.parse(entry.key)
+                        } catch (e: Exception) {
+                            Log.e("ImportBackup", "Failed to parse date for undoable items: ${entry.key}")
+                            null
+                        }
+                    }.filterKeys { it != null } as Map<LocalDate, List<TodoItem>>
+                    
+                    if (undoableItemsByDate.isNotEmpty()) {
+                        todoViewModel.restoreUndoableDeletedItemsByDate(undoableItemsByDate)
+                        Log.d("ImportBackup", "Restored undoable deleted items for ${undoableItemsByDate.size} dates")
+                    }
+                }
+                
+                // Restore last category action if available
+                backupData.lastCategoryAction?.let {
+                    todoViewModel.setLastCategoryAction(it)
+                    Log.d("ImportBackup", "Restored last category action: ${it::class.simpleName}")
+                }
             }
             
             // Clean up the temporary directory
@@ -515,8 +550,32 @@ private fun importLegacyJsonBackup(context: Context, uri: Uri, todoViewModel: To
                     todoViewModel.saveRecentlySelectedCategory("secondary", it)
                 }
                 backupData.recentTertiaryCategory?.let {
-                    Log.d("ImportBackup", "Setting recent tertiary category: $it")
                     todoViewModel.saveRecentlySelectedCategory("tertiary", it)
+                    Log.d("ImportBackup", "Setting recent tertiary category: $it")
+                }
+                
+                // Restore undoable deleted items by date if available (for newer legacy backups that might have this)
+                backupData.undoableDeletedItemsByDate?.let { undoableItemsMap ->
+                    // Convert string keys back to LocalDate
+                    val undoableItemsByDate = undoableItemsMap.mapKeys { entry ->
+                        try {
+                            LocalDate.parse(entry.key)
+                        } catch (e: Exception) {
+                            Log.e("ImportBackup", "Failed to parse date for undoable items: ${entry.key}")
+                            null
+                        }
+                    }.filterKeys { it != null } as Map<LocalDate, List<TodoItem>>
+                    
+                    if (undoableItemsByDate.isNotEmpty()) {
+                        todoViewModel.restoreUndoableDeletedItemsByDate(undoableItemsByDate)
+                        Log.d("ImportBackup", "Restored undoable deleted items for ${undoableItemsByDate.size} dates")
+                    }
+                }
+                
+                // Restore last category action if available
+                backupData.lastCategoryAction?.let {
+                    todoViewModel.setLastCategoryAction(it)
+                    Log.d("ImportBackup", "Restored last category action: ${it::class.simpleName}")
                 }
             }
 
