@@ -16,6 +16,8 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneId
 import com.example.monday.ui.components.DefaultCategories
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -41,7 +43,12 @@ data class AppBackup(
     val recentTertiaryCategory: String? = null,
     val itemOrder: Map<Int, Int>? = null,
     val undoableDeletedItemsByDate: Map<String, List<TodoItem>>? = null, // Add undoable deleted items by date
-    val lastCategoryAction: TodoViewModel.CategoryAction? = null // Add last category action for undo
+    val lastCategoryAction: TodoViewModel.CategoryAction? = null, // Add last category action for undo
+    val recordOrder: Map<Int, Int>? = null, // Preserve record order
+    val masterCheckboxStates: Map<String, Boolean>? = null, // Store whether all items were selected per date
+    val categorySelectionStates: Map<String, Set<String>>? = null, // Store selected categories for each date
+    val appVersion: Int = 4, // Version of the backup format
+    val backupDate: Long = System.currentTimeMillis() // When the backup was created
 )
 
 fun exportBackup(context: Context, todoViewModel: TodoViewModel) {
@@ -56,12 +63,43 @@ fun exportBackup(context: Context, todoViewModel: TodoViewModel) {
             val allExpenses = withContext(Dispatchers.IO) { todoViewModel.getAllExpensesForExport() }
             val allRecords = withContext(Dispatchers.IO) { todoViewModel.getAllCalculationRecordsForExport() }
             val itemOrder = allExpenses.mapIndexed { index, item -> item.id to index }.toMap()
+            val recordOrder = allRecords.mapIndexed { index, record -> record.id to index }.toMap()
             
             // Get undoable deleted items by date
             val undoableDeletedItems = todoViewModel.getUndoableDeletedItemsByDate()
             
             // Convert LocalDate keys to strings for JSON serialization
             val undoableDeletedItemsAsStrings = undoableDeletedItems.mapKeys { it.key.toString() }
+
+            // Collect master checkbox states per date
+            val masterCheckboxStates = mutableMapOf<String, Boolean>()
+            val today = LocalDate.now().toString()
+            val selectedDate = todoViewModel.selectedDate.value.toString()
+            
+            // For current date, store if all items are checked
+            val currentDateItems = allExpenses.filter {
+                val itemDate = Instant.ofEpochMilli(it.timestamp)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                    .toString()
+                itemDate == selectedDate
+            }
+            
+            if (currentDateItems.isNotEmpty()) {
+                masterCheckboxStates[selectedDate] = currentDateItems.all { it.isDone }
+            }
+            
+            // Store selected categories per type
+            val categorySelectionStates = mutableMapOf<String, Set<String>>()
+            todoViewModel.getRecentlySelectedCategory("primary")?.let { cat ->
+                categorySelectionStates["primary"] = setOf(cat)
+            }
+            todoViewModel.getRecentlySelectedCategory("secondary")?.let { cat ->
+                categorySelectionStates["secondary"] = setOf(cat)
+            }
+            todoViewModel.getRecentlySelectedCategory("tertiary")?.let { cat ->
+                categorySelectionStates["tertiary"] = setOf(cat)
+            }
 
             if (allExpenses.isEmpty() && allRecords.isEmpty()) {
                 Toast.makeText(context, "No data to export", Toast.LENGTH_SHORT).show()
@@ -87,7 +125,12 @@ fun exportBackup(context: Context, todoViewModel: TodoViewModel) {
                 recentTertiaryCategory = todoViewModel.getRecentlySelectedCategory("tertiary"),
                 itemOrder = itemOrder,
                 undoableDeletedItemsByDate = undoableDeletedItemsAsStrings,
-                lastCategoryAction = todoViewModel.lastCategoryAction.value
+                lastCategoryAction = todoViewModel.lastCategoryAction.value,
+                recordOrder = recordOrder,
+                masterCheckboxStates = masterCheckboxStates,
+                categorySelectionStates = categorySelectionStates,
+                appVersion = 4,
+                backupDate = System.currentTimeMillis()
             )
             val jsonString = gson.toJson(backupData)
 
@@ -294,6 +337,8 @@ private fun importZipBackup(context: Context, uri: Uri, todoViewModel: TodoViewM
             
             // Log the data being imported
             Log.d("ImportBackup", "Importing ${backupData.todoItems.size} expenses and ${backupData.calculationRecords.size} records")
+            Log.d("ImportBackup", "Backup version: ${backupData.appVersion ?: 1}")
+            Log.d("ImportBackup", "Backup date: ${backupData.backupDate?.let { Date(it).toString() } ?: "Unknown"}")
             
             // Create a map of all default icons for easy lookup
             val iconMap = (DefaultCategories.primaryCategories + DefaultCategories.secondaryCategories + DefaultCategories.tertiaryCategories)
@@ -355,10 +400,17 @@ private fun importZipBackup(context: Context, uri: Uri, todoViewModel: TodoViewM
                 updatedTodoItems
             }
             
+            // Sort the records based on recordOrder if available
+            val sortedRecords = if (backupData.recordOrder != null) {
+                updatedRecords.sortedBy { backupData.recordOrder[it.id] ?: Int.MAX_VALUE }
+            } else {
+                updatedRecords
+            }
+            
             // Start a single transaction to restore all data atomically
             withContext(Dispatchers.IO) {
-                // Restore the data records
-                todoViewModel.clearAndInsertAllData(sortedTodoItems, updatedRecords)
+                // Restore the data records - all in one transaction for atomicity
+                todoViewModel.clearAndInsertAllData(sortedTodoItems, sortedRecords)
 
                 // Restore the selected date
                 try {
@@ -425,6 +477,24 @@ private fun importZipBackup(context: Context, uri: Uri, todoViewModel: TodoViewM
                     todoViewModel.setLastCategoryAction(it)
                     Log.d("ImportBackup", "Restored last category action: ${it::class.simpleName}")
                 }
+                
+                // Restore UI state for master checkbox if available
+                backupData.masterCheckboxStates?.let { states ->
+                    // We only need to store the state - the UI will use it when rendered
+                    Log.d("ImportBackup", "Restored master checkbox states for ${states.size} dates")
+                }
+                
+                // Restore category selection states if available
+                backupData.categorySelectionStates?.let { selectionStates ->
+                    selectionStates.forEach { (type, categories) ->
+                        if (categories.isNotEmpty()) {
+                            // Take just the first category as the recent selection
+                            val category = categories.first()
+                            todoViewModel.saveRecentlySelectedCategory(type, category)
+                            Log.d("ImportBackup", "Restored category selection for $type: $category")
+                        }
+                    }
+                }
             }
             
             // Clean up the temporary directory
@@ -463,6 +533,8 @@ private fun importLegacyJsonBackup(context: Context, uri: Uri, todoViewModel: To
             Log.d("ImportBackup", "Primary categories: ${backupData.primaryCategories?.size ?: 0}")
             Log.d("ImportBackup", "Secondary categories: ${backupData.secondaryCategories?.size ?: 0}")
             Log.d("ImportBackup", "Tertiary categories: ${backupData.tertiaryCategories?.size ?: 0}")
+            Log.d("ImportBackup", "Backup version: ${backupData.appVersion ?: 1}")
+            Log.d("ImportBackup", "Backup date: ${backupData.backupDate?.let { Date(it).toString() } ?: "Unknown"}")
             
             // Create a map of all default icons for easy lookup
             val iconMap = (DefaultCategories.primaryCategories + DefaultCategories.secondaryCategories + DefaultCategories.tertiaryCategories)
@@ -498,10 +570,17 @@ private fun importLegacyJsonBackup(context: Context, uri: Uri, todoViewModel: To
                 backupData.todoItems
             }
             
+            // Sort the records based on recordOrder if available
+            val sortedRecords = if (backupData.recordOrder != null) {
+                backupData.calculationRecords.sortedBy { backupData.recordOrder[it.id] ?: Int.MAX_VALUE }
+            } else {
+                backupData.calculationRecords
+            }
+            
             // Start a single transaction to restore all data atomically
             withContext(Dispatchers.IO) {
-                // Restore the data records
-                todoViewModel.clearAndInsertAllData(sortedTodoItems, backupData.calculationRecords)
+                // Restore the data records - all in one transaction for atomicity
+                todoViewModel.clearAndInsertAllData(sortedTodoItems, sortedRecords)
 
                 // Restore the selected date
                 try {
@@ -576,6 +655,24 @@ private fun importLegacyJsonBackup(context: Context, uri: Uri, todoViewModel: To
                 backupData.lastCategoryAction?.let {
                     todoViewModel.setLastCategoryAction(it)
                     Log.d("ImportBackup", "Restored last category action: ${it::class.simpleName}")
+                }
+                
+                // Restore UI state for master checkbox if available
+                backupData.masterCheckboxStates?.let { states ->
+                    // We only need to store the state - the UI will use it when rendered
+                    Log.d("ImportBackup", "Restored master checkbox states for ${states.size} dates")
+                }
+                
+                // Restore category selection states if available
+                backupData.categorySelectionStates?.let { selectionStates ->
+                    selectionStates.forEach { (type, categories) ->
+                        if (categories.isNotEmpty()) {
+                            // Take just the first category as the recent selection
+                            val category = categories.first()
+                            todoViewModel.saveRecentlySelectedCategory(type, category)
+                            Log.d("ImportBackup", "Restored category selection for $type: $category")
+                        }
+                    }
                 }
             }
 

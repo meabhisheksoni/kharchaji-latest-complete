@@ -41,32 +41,34 @@ fun CategorySelectionPopup(
     initialSelectedCategories: List<String> = emptyList(),
     viewModel: TodoViewModel
 ) {
-    // Get categories from ViewModel's StateFlows
-    val primaryCategories by viewModel.primaryCategories.collectAsState()
-    val secondaryCategories by viewModel.secondaryCategories.collectAsState()
-    val tertiaryCategories by viewModel.tertiaryCategories.collectAsState()
-
-    // Get recently selected categories from ViewModel
-    val recentPrimaryCategory = viewModel.getRecentlySelectedCategory("primary")
-    val recentSecondaryCategory = viewModel.getRecentlySelectedCategory("secondary")
+    // Fetch categories from ViewModel
+    val primaryCategories = viewModel.primaryCategories.collectAsState().value
+    val secondaryCategories = viewModel.secondaryCategories.collectAsState().value
+    val tertiaryCategories = viewModel.tertiaryCategories.collectAsState().value
     
-    // Initialize with recent selections or from passed categories
+    // State for selected categories
     var selectedPrimaryCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
     var selectedSecondaryCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
-    var selectedTertiaryCategories by remember { mutableStateOf<Set<ExpenseCategory>>(emptySet()) }
+    // Change from Set to single nullable ExpenseCategory
+    var selectedTertiaryCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
     
-    // Initialize selected categories if any were passed or use recent selections
+    // Get recently selected categories
+    val recentPrimaryCategory = viewModel.getRecentlySelectedCategory("primary")
+    val recentSecondaryCategory = viewModel.getRecentlySelectedCategory("secondary")
+    val recentTertiaryCategory = viewModel.getRecentlySelectedCategory("tertiary")
+    
+    // Process initial selected categories and recent categories
     LaunchedEffect(initialSelectedCategories, primaryCategories, secondaryCategories, tertiaryCategories) {
         // Clear previous selections
         selectedPrimaryCategory = null
         selectedSecondaryCategory = null
-        selectedTertiaryCategories = emptySet()
+        selectedTertiaryCategory = null
 
         // First check passed categories
         initialSelectedCategories.forEach { categoryName ->
             // Check in tertiary categories first (most common)
             tertiaryCategories.find { it.name == categoryName }?.let {
-                selectedTertiaryCategories = selectedTertiaryCategories + it
+                selectedTertiaryCategory = it
             }
             
             // Check in secondary categories
@@ -91,6 +93,13 @@ fun CategorySelectionPopup(
         if (selectedSecondaryCategory == null && recentSecondaryCategory != null) {
             secondaryCategories.find { it.name == recentSecondaryCategory }?.let {
                 selectedSecondaryCategory = it
+            }
+        }
+        
+        // If no tertiary category was selected, try to use the recent one
+        if (selectedTertiaryCategory == null && recentTertiaryCategory != null) {
+            tertiaryCategories.find { it.name == recentTertiaryCategory }?.let {
+                selectedTertiaryCategory = it
             }
         }
     }
@@ -186,18 +195,14 @@ fun CategorySelectionPopup(
                         CustomDivider()
                     }
                     
-                    // Tertiary Categories Column (multi-select)
+                    // Tertiary Categories Column (now single-select)
                     if (showTertiaryCategories) {
-                        TertiaryCategoryColumn(
+                        CategoryColumn(
                             title = "Category",
                             categories = tertiaryCategories,
-                            selectedCategories = selectedTertiaryCategories,
+                            selectedCategory = selectedTertiaryCategory,
                             onCategorySelected = { category ->
-                                selectedTertiaryCategories = if (selectedTertiaryCategories.contains(category)) {
-                                    selectedTertiaryCategories - category
-                                } else {
-                                    selectedTertiaryCategories + category
-                                }
+                                selectedTertiaryCategory = if (selectedTertiaryCategory == category) null else category
                             },
                             modifier = Modifier.weight(1f)
                         )
@@ -222,7 +227,7 @@ fun CategorySelectionPopup(
                             val selectedCategories = mutableListOf<String>()
                             val hasPrimary = selectedPrimaryCategory != null
                             val hasSecondary = selectedSecondaryCategory != null
-                            val hasTertiary = selectedTertiaryCategories.isNotEmpty()
+                            val hasTertiary = selectedTertiaryCategory != null
                             
                             // Add primary category if selected
                             selectedPrimaryCategory?.let {
@@ -238,9 +243,11 @@ fun CategorySelectionPopup(
                                 viewModel.saveRecentlySelectedCategory("secondary", it.name)
                             }
                             
-                            // Add all selected tertiary categories
-                            selectedTertiaryCategories.forEach {
+                            // Add tertiary category if selected
+                            selectedTertiaryCategory?.let {
                                 selectedCategories.add(it.name)
+                                // Save as recently selected
+                                viewModel.saveRecentlySelectedCategory("tertiary", it.name)
                             }
                             
                             // Pass the category flags along with the names
@@ -249,7 +256,7 @@ fun CategorySelectionPopup(
                         },
                         enabled = selectedPrimaryCategory != null || 
                                  selectedSecondaryCategory != null || 
-                                 selectedTertiaryCategories.isNotEmpty()
+                                 selectedTertiaryCategory != null
                     ) {
                         Text("Apply")
                     }
@@ -296,82 +303,6 @@ fun CategoryColumn(
         ) {
             items(categories) { category ->
                 val isSelected = category == selectedCategory
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(36.dp)
-                        .padding(horizontal = 0.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(
-                            if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                            else Color.Transparent
-                        )
-                        .clickable { onCategorySelected(category) }
-                        .padding(horizontal = 2.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = category.icon,
-                        contentDescription = null,
-                        tint = if (isSelected) MaterialTheme.colorScheme.primary 
-                              else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    
-                    Spacer(modifier = Modifier.width(2.dp))
-                    
-                    Text(
-                        text = category.name,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primary 
-                               else MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    
-                    Spacer(modifier = Modifier.weight(1f))
-                    
-                    if (isSelected) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun TertiaryCategoryColumn(
-    title: String,
-    categories: List<ExpenseCategory>,
-    selectedCategories: Set<ExpenseCategory>,
-    onCategorySelected: (ExpenseCategory) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 6.dp),
-            textAlign = TextAlign.Center
-        )
-        
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            items(categories) { category ->
-                val isSelected = selectedCategories.contains(category)
                 
                 Row(
                     modifier = Modifier

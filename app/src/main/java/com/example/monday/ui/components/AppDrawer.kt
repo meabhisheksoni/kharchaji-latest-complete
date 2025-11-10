@@ -7,6 +7,11 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -19,10 +24,13 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun AppDrawerContent(
-    onExport: () -> Unit,
-    onImport: () -> Unit,
+    onExport: () -> Unit = {},
+    onImport: () -> Unit = {},
     onBatchSave: () -> Unit = {},
-    onSettings: () -> Unit = {}
+    onSettings: () -> Unit = {},
+    onExportCalendarView: () -> Unit = {},
+    onAllExpenses: () -> Unit = {},
+    onSaveAll: () -> Unit = {}
 ) {
     ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
         Text(
@@ -33,6 +41,20 @@ fun AppDrawerContent(
         HorizontalDivider()
         
         NavigationDrawerItem(
+            icon = { Icon(Icons.Default.List, contentDescription = "All Expenses") },
+            label = { Text("All Expenses") },
+            selected = false,
+            onClick = onAllExpenses
+        )
+        
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Calendar View") },
+            label = { Text("Export Calendar View") },
+            selected = false,
+            onClick = onExportCalendarView
+        )
+        
+        NavigationDrawerItem(
             icon = { Icon(Icons.Default.Save, contentDescription = "Batch Save Records") },
             label = { Text("Batch Save All Records") },
             selected = false,
@@ -40,17 +62,10 @@ fun AppDrawerContent(
         )
         
         NavigationDrawerItem(
-            icon = { Icon(Icons.Default.UploadFile, contentDescription = "Export Data") },
-            label = { Text("Export Data") },
+            icon = { Icon(Icons.Default.Storage, contentDescription = "View All Records") },
+            label = { Text("View All Records") },
             selected = false,
-            onClick = onExport
-        )
-        
-        NavigationDrawerItem(
-            icon = { Icon(Icons.Default.Download, contentDescription = "Load Data") },
-            label = { Text("Import Data") },
-            selected = false,
-            onClick = onImport
+            onClick = onSaveAll
         )
         
         NavigationDrawerItem(

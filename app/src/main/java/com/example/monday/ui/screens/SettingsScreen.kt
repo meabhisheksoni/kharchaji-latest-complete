@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +22,14 @@ import com.example.monday.ui.components.DefaultCategories
 import com.example.monday.ui.components.DeleteCategoryConfirmDialog
 import com.example.monday.ui.components.EnhancedCategorySection
 import kotlinx.coroutines.launch
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import com.example.monday.exportBackup
+import com.example.monday.importBackup
+import com.example.monday.overlay.OverlayHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,6 +38,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     
     // State for category management
     var showPrimaryCategories by remember { mutableStateOf(true) }
@@ -48,6 +59,15 @@ fun SettingsScreen(
     // Observe last action for undo availability
     val lastCategoryAction by viewModel.lastCategoryAction.collectAsState()
     
+    // File picker for import
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            importBackup(context, uri, viewModel)
+        }
+    }
+    
     // Load visibility preferences
     LaunchedEffect(Unit) {
         showPrimaryCategories = viewModel.getCategoryVisibilitySetting("primary") ?: true
@@ -61,7 +81,7 @@ fun SettingsScreen(
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -76,7 +96,7 @@ fun SettingsScreen(
                             }
                         ) {
                             Icon(
-                                Icons.Default.Undo, 
+                                Icons.AutoMirrored.Filled.Undo, 
                                 contentDescription = "Undo Last Category Change",
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -93,6 +113,195 @@ fun SettingsScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
+            // Backup & Restore Section
+            item {
+                Text(
+                    text = "Backup & Restore",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+                
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Data Management",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        // Export Data
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { 
+                                    scope.launch {
+                                        exportBackup(context, viewModel)
+                                    }
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Upload,
+                                contentDescription = "Export Data",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    text = "Export Data",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = "Save all your expenses and settings",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        
+                        // Import Data
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { 
+                                    filePickerLauncher.launch("*/*")
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Download,
+                                contentDescription = "Import Data",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    text = "Import Data",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = "Restore your expenses from backup",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Floating Button Section
+            item {
+                Text(
+                    text = "Quick Access",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+                
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Floating Button",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        Text(
+                            text = "Add expenses from anywhere on your phone with a floating button that appears over all apps",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                        
+                        // Enable Floating Button
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { 
+                                    if (OverlayHelper.hasOverlayPermission(context)) {
+                                        OverlayHelper.startOverlayService(context)
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Floating button enabled!")
+                                        }
+                                    } else {
+                                        OverlayHelper.openOverlaySettings(context)
+                                    }
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.TouchApp,
+                                contentDescription = "Enable Floating Button",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Enable Floating Button",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = if (OverlayHelper.hasOverlayPermission(context)) 
+                                        "Tap to activate" 
+                                    else 
+                                        "Grant permission first",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        
+                        // Disable Floating Button
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { 
+                                    OverlayHelper.stopOverlayService(context)
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Floating button disabled")
+                                    }
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Disable Floating Button",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    text = "Disable Floating Button",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = "Remove the floating button",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Categories Title
             item {
                 Text(
                     text = "Categories",
@@ -291,13 +500,7 @@ fun SettingsScreen(
             onDismiss = { showEditCategoryDialog = Triple("", null, null) },
             onSave = { name, icon ->
                 val newCategory = ExpenseCategory(name, icon)
-                val currentCategories = when (categoryType) {
-                    "primary" -> primaryCategories
-                    "secondary" -> secondaryCategories
-                    "tertiary" -> tertiaryCategories
-                    else -> emptyList()
-                }
-
+                
                 scope.launch {
                     if (categoryToEdit != null) {
                         // This is an edit

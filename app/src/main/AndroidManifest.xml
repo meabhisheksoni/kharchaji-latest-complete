@@ -14,8 +14,12 @@
     <!-- Camera permissions -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    
+    <!-- Overlay permission for floating button -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
+        android:name=".KharchajiApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -25,15 +29,23 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Kharchaji"
         tools:targetApi="31">
+        
+        <!-- Splash Activity -->
         <activity
-            android:name=".MainActivity"
+            android:name=".SplashActivity"
             android:exported="true"
-            android:theme="@style/Theme.Kharchaji">
+            android:theme="@style/Theme.Kharchaji.SplashScreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        
+        <!-- Main Activity -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Kharchaji" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -44,6 +56,75 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/fileprovider_paths" />
         </provider>
+        
+        <!-- WorkManager initialization -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+        
+        <!-- Expense Widget -->
+        <receiver
+            android:name=".widget.ExpenseWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/expense_widget_info" />
+        </receiver>
+        
+        <!-- Widget Activity -->
+        <activity
+            android:name=".widget.ExpenseWidgetActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Kharchaji"
+            android:taskAffinity=""
+            android:excludeFromRecents="true" />
+        
+        <!-- Widget Service -->
+        <service
+            android:name=".widget.ExpenseWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+        
+        <!-- Glance Interactive Widget -->
+        <receiver
+            android:name=".widget.ExpenseGlanceWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/glance_expense_widget_info" />
+        </receiver>
+        
+        <!-- Widget Input Activity -->
+        <activity
+            android:name=".widget.WidgetInputActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:taskAffinity=""
+            android:excludeFromRecents="true" />
+        
+        <!-- Overlay Service -->
+        <service
+            android:name=".overlay.OverlayService"
+            android:exported="false" />
+        
+        <!-- Overlay Permission Activity -->
+        <activity
+            android:name=".overlay.OverlayPermissionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Kharchaji" />
     </application>
 
 </manifest>

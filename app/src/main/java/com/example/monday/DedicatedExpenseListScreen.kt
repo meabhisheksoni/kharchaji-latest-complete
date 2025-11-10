@@ -69,7 +69,6 @@ import com.kizitonwose.calendar.core.CalendarDay
 import com.kizitonwose.calendar.core.DayPosition
 import com.kizitonwose.calendar.core.daysOfWeek
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
 
 // Project specific imports
 import com.example.monday.TodoViewModel
@@ -94,24 +93,15 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.FileUpload
-import java.io.File
-import java.io.FileWriter
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import android.content.Intent
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import com.example.monday.ui.components.AppDrawerContent
 import com.example.monday.ui.components.DateSummary
 import com.example.monday.ui.components.ExpenseActions
 import com.example.monday.ui.components.CategorySelectionDialog
 import com.example.monday.ui.components.DeleteAllConfirmationDialog
-import com.example.monday.ui.components.ImportConfirmationDialog
 import com.example.monday.ui.components.CategorySelectionPopup
 import androidx.compose.runtime.derivedStateOf
+import com.example.monday.ui.components.MultiCategorySelectionDialog
+import com.example.monday.ShareUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,11 +110,13 @@ fun DedicatedExpenseListScreen(
     onShareClick: () -> Unit,
     onNavigateToBatchSave: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
-    onViewRecordsClick: () -> Unit = {}
+    onViewRecordsClick: () -> Unit = {},
+    onAllExpensesClick: () -> Unit = {}
 ) {
     var editingItemId by remember { mutableStateOf<Int?>(null) }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // Date Picker State - now from ViewModel
     val selectedDate by todoViewModel.selectedDate.collectAsState()
@@ -133,35 +125,30 @@ fun DedicatedExpenseListScreen(
     // State for custom calendar dialog visibility
     var showCustomCalendarDialog by remember { mutableStateOf(false) }
     
+    // State for category filter dialog for calendar view export
+    var showCalendarViewFilterDialog by remember { mutableStateOf(false) }
+    
     // Drawer state for the navigation drawer
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
     
-    // State for file picker
-    var showImportConfirmDialog by remember { mutableStateOf<Uri?>(null) }
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            // Show confirmation dialog before importing
-            showImportConfirmDialog = uri
-        }
-    }
-
     // Step 2: Filter displayed expenses
     // Observe the selectedDate from ViewModel for filtering
     val itemsFromViewModel by todoViewModel.getExpensesForDate(selectedDate).collectAsState(initial = emptyList())
-    val itemsForSelectedDate = remember(itemsFromViewModel) {
-        itemsFromViewModel.sortedBy { it.id }
+    val itemsForSelectedDate by remember(itemsFromViewModel) {
+        derivedStateOf {
+            itemsFromViewModel.sortedBy { it.id }
+        }
     }
 
     // Calculations should now use itemsForSelectedDate
-    val totalItemsCount = itemsForSelectedDate.size
-    val checkedItemsCount = itemsForSelectedDate.count { it.isDone }
-    val totalSum by derivedStateOf { itemsForSelectedDate.sumOf { parsePrice(it.text) } }
-    val checkedSum by derivedStateOf { itemsForSelectedDate.filter { it.isDone }.sumOf { parsePrice(it.text) } }
-    var masterCheckboxState by remember(itemsForSelectedDate) { 
-        mutableStateOf(itemsForSelectedDate.isNotEmpty() && itemsForSelectedDate.all { it.isDone })
+    val totalItemsCount by remember(itemsForSelectedDate) { derivedStateOf { itemsForSelectedDate.size } }
+    val checkedItemsCount by remember(itemsForSelectedDate) { derivedStateOf { itemsForSelectedDate.count { it.isDone } } }
+    val totalSum by remember(itemsForSelectedDate) { derivedStateOf { itemsForSelectedDate.sumOf { parsePrice(it.text) } } }
+    val checkedSum by remember(itemsForSelectedDate) { derivedStateOf { itemsForSelectedDate.filter { it.isDone }.sumOf { parsePrice(it.text) } } }
+    val masterCheckboxState by remember(itemsForSelectedDate) {
+        derivedStateOf {
+            itemsForSelectedDate.isNotEmpty() && itemsForSelectedDate.all { it.isDone }
+        }
     }
     val undoableItemsStack by todoViewModel.undoableDeletedItems.collectAsState()
 
@@ -180,6 +167,116 @@ fun DedicatedExpenseListScreen(
         ExpenseCategory("Entertainment", Icons.Outlined.Movie),
         ExpenseCategory("Other", Icons.Outlined.MoreHoriz)
     )
+
+    // Show category filter dialog for calendar view export
+    if (showCalendarViewFilterDialog) {
+        var allCategories by remember { mutableStateOf<List<String>>(emptyList()) }
+        var isLoading by remember { mutableStateOf(true) }
+
+        LaunchedEffect(key1 = Unit) {
+            allCategories = withContext(Dispatchers.IO) {
+                todoViewModel.getPrimaryCategories()
+            }
+            isLoading = false
+        }
+
+        if (isLoading) {
+            // Show loading indicator
+            AlertDialog(
+                onDismissRequest = { showCalendarViewFilterDialog = false },
+                title = { Text("Loading Categories") },
+                text = { Text("Please wait...") },
+                confirmButton = {}
+            )
+        } else if (allCategories.isEmpty()) {
+            // Show message when no primary categories are available
+            AlertDialog(
+                onDismissRequest = { showCalendarViewFilterDialog = false },
+                title = { Text("No Categories Available") },
+                text = { Text("No primary categories found. Please add some categories to your expenses first.") },
+                confirmButton = {
+                    Button(onClick = { showCalendarViewFilterDialog = false }) {
+                        Text("OK")
+                    }
+                }
+            )
+        } else {
+            // Show category selection dialog when categories are available
+            MultiCategorySelectionDialog(
+                title = "Choose Primary Categories to Export",
+                allCategories = allCategories,
+                onDismiss = { showCalendarViewFilterDialog = false },
+                onConfirm = { selectedCategories ->
+                    scope.launch {
+                        val allExpenses = withContext(Dispatchers.IO) {
+                            todoViewModel.getAllExpensesForExport()
+                        }
+
+                        // Get all unique categories used in any expense
+                        val allUniqueCategories = withContext(Dispatchers.IO) {
+                            todoViewModel.getAllUniqueCategories()
+                        }
+
+                        // Get categories organized by type
+                        val regularCategoriesByType = withContext(Dispatchers.IO) {
+                            todoViewModel.getAllCategoriesByType()
+                        }
+                        
+                        // Create a modified categoriesByType with selected categories only in primary
+                        val categoriesByType = if (selectedCategories.isNotEmpty()) {
+                            mapOf(
+                                "primary" to selectedCategories,
+                                "secondary" to (regularCategoriesByType["secondary"] ?: emptyList()),
+                                "tertiary" to (regularCategoriesByType["tertiary"] ?: emptyList()),
+                                "other" to (regularCategoriesByType["other"] ?: emptyList())
+                            )
+                        } else {
+                            regularCategoriesByType
+                        }
+
+                        // Filter expenses if categories are provided
+                        val filteredExpenses = if (selectedCategories.isNotEmpty()) {
+                            allExpenses.filter { expense ->
+                                expense.categories?.any { category -> selectedCategories.contains(category) } == true
+                            }
+                        } else {
+                            allExpenses
+                        }
+
+                        val expenses = filteredExpenses.map { todoItem ->
+                            val (description, quantity, price) = parseItemText(todoItem.text)
+                            val category = todoItem.categories?.firstOrNull()
+
+                            Expense(
+                                description = description,
+                                amount = price.toDouble(),
+                                quantity = quantity,
+                                category = category,
+                                timestamp = todoItem.timestamp
+                            )
+                        }
+
+                        // Generate filter description
+                        val filterDescription = if (selectedCategories.isNotEmpty()) {
+                            selectedCategories.joinToString(", ")
+                        } else {
+                            null
+                        }
+
+                        // Share the calendar view with all unique categories and categories by type
+                        ShareUtils.shareCalendarViewHtml(
+                            context = context,
+                            expenses = expenses,
+                            filterDescription = filterDescription,
+                            allCategories = allUniqueCategories,
+                            categoriesByType = categoriesByType
+                        )
+                    }
+                    showCalendarViewFilterDialog = false
+                }
+            )
+        }
+    }
 
     // New category popup for hierarchical categories
     if (showCategoryPopup) {
@@ -271,23 +368,17 @@ fun DedicatedExpenseListScreen(
         drawerState = drawerState,
         drawerContent = {
             AppDrawerContent(
-                onExport = {
+                onExport = { showCalendarViewFilterDialog = true },
+                onImport = { /* Not implemented yet */ },
+                onSaveAll = { 
                     scope.launch {
-                        exportBackup(context, todoViewModel)
                         drawerState.close()
-                    }
-                },
-                onImport = {
-                    scope.launch {
-                        filePickerLauncher.launch("*/*")
-                        drawerState.close()
+                        onViewRecordsClick()
                     }
                 },
                 onBatchSave = {
                     scope.launch {
-                        // Navigate to the batch save screen using NavController
                         drawerState.close()
-                        // Using the MainActivity's NavController - we'll need to pass this in
                         onNavigateToBatchSave()
                     }
                 },
@@ -295,6 +386,18 @@ fun DedicatedExpenseListScreen(
                     scope.launch {
                         drawerState.close()
                         onNavigateToSettings()
+                    }
+                },
+                onAllExpenses = {
+                    scope.launch {
+                        drawerState.close()
+                        onAllExpensesClick()
+                    }
+                },
+                onExportCalendarView = {
+                    scope.launch {
+                        drawerState.close()
+                        showCalendarViewFilterDialog = true
                     }
                 }
             )
@@ -337,22 +440,11 @@ fun DedicatedExpenseListScreen(
                                         )
                                         
                                         // Use our simplified duplicate detection
-                                        val wasNewRecordCreated = todoViewModel.insertCalculationRecordIfNotDuplicate(newRecord)
-                                        val dateStr = selectedDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))
-                                        
-                                        // Show appropriate message based on whether a new record was created
-                                        if (wasNewRecordCreated) {
-                                            Toast.makeText(context, "New record saved for $dateStr", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Identical expenses already saved for $dateStr", Toast.LENGTH_LONG).show()
-                                        }
+                                        todoViewModel.insertCalculationRecordIfNotDuplicate(newRecord)
                                     } catch (e: Exception) {
                                         Log.e("SaveRecord", "Error saving record", e)
-                                        Toast.makeText(context, "Error saving record: ${e.message}", Toast.LENGTH_LONG).show()
                                     }
                                 }
-                            } else {
-                                Toast.makeText(context, "No items to save as record", Toast.LENGTH_SHORT).show()
                             }
                         }) {
                             Icon(Icons.Filled.Save, contentDescription = "Save Current List as Record")
@@ -374,36 +466,11 @@ fun DedicatedExpenseListScreen(
                                 if (itemsForSelectedDate.isNotEmpty()) {
                                     scope.launch {
                                         try {
-                                            val dateStr = selectedDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))
-                                            val result = todoViewModel.saveToMasterRecord(selectedDate, itemsForSelectedDate)
-                                            val regularCreated = result.first
-                                            val masterCreatedOrUpdated = result.second
-
-                                            when {
-                                                // Both master and regular records were created
-                                                regularCreated && masterCreatedOrUpdated -> {
-                                                    Toast.makeText(context, "Created master record and regular record for $dateStr", Toast.LENGTH_SHORT).show()
-                                                }
-                                                // Only master record was created/updated, regular record already existed
-                                                !regularCreated && masterCreatedOrUpdated -> {
-                                                    Toast.makeText(context, "Updated master record for $dateStr. Regular record already exists.", Toast.LENGTH_SHORT).show()
-                                                }
-                                                // Nothing was created (both already existed and no changes to master)
-                                                !regularCreated && !masterCreatedOrUpdated -> {
-                                                    Toast.makeText(context, "Identical expenses already saved for $dateStr", Toast.LENGTH_LONG).show()
-                                                }
-                                                // Only regular was created (unlikely since master is always created/updated)
-                                                else -> {
-                                                    Toast.makeText(context, "Saved to master record for $dateStr", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
+                                            todoViewModel.saveToMasterRecord(selectedDate, itemsForSelectedDate)
                                         } catch (e: Exception) {
                                             Log.e("MasterSave", "Error saving to master record", e)
-                                            Toast.makeText(context, "Error saving to master record: ${e.message}", Toast.LENGTH_LONG).show()
                                         }
                                     }
-                                } else {
-                                    Toast.makeText(context, "No items to save to master record", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier
@@ -454,16 +521,14 @@ fun DedicatedExpenseListScreen(
                 onMasterCheckboxChange = { isChecked ->
                     // If isChecked is true, check all items
                     // If isChecked is false, uncheck all items
-                                itemsForSelectedDate.forEach { item ->
-                        todoViewModel.updateItem(item.copy(isDone = isChecked))
-                                }
-                        },
+                                val updated = itemsForSelectedDate.map { it.copy(isDone = isChecked) }
+                                todoViewModel.updateItems(updated)
+                                },
                         onSelectAllClick = {
                     val shouldCheck = !masterCheckboxState || itemsForSelectedDate.any { !it.isDone }
-                                itemsForSelectedDate.forEach { item ->
-                        todoViewModel.updateItem(item.copy(isDone = shouldCheck))
-                                }
-                        },
+                                val updated = itemsForSelectedDate.map { it.copy(isDone = shouldCheck) }
+                                todoViewModel.updateItems(updated)
+                                },
                         isUndoEnabled = undoableItemsStack.isNotEmpty(),
                 onUndoClick = {
                     todoViewModel.undoLastDelete()
@@ -477,37 +542,29 @@ fun DedicatedExpenseListScreen(
                         onCategoriesClick = { categoryNames, hasPrimary, hasSecondary, hasTertiary ->
                             // Apply categories to checked items
                             if (categoryNames.isNotEmpty()) {
-                                itemsForSelectedDate.filter { it.isDone }.forEach { item ->
+                                val updatedItems = itemsForSelectedDate.filter { it.isDone }.map { item ->
                                     val (baseText, _) = parseCategoryInfo(item.text)
                                     val categoryCodes = if (categoryNames.isNotEmpty()) {
                                         "|CATS:" + categoryNames.joinToString(",")
                                     } else {
                                         ""
                                     }
-                                    
-                                    // Update the item with the new categories and flags
-                            // NOTE: We don't uncheck items here anymore, that's handled in ExpenseActions
-                            Log.d("CategoryDebug", "Applying categories to item ${item.id}: $categoryNames")
-                            Log.d("CategoryDebug", "Setting primary: $hasPrimary, secondary: $hasSecondary, tertiary: $hasTertiary")
-                            
-                                    todoViewModel.updateItem(item.copy(
+                                    item.copy(
                                         text = baseText + categoryCodes,
                                         categories = categoryNames,
                                         hasPrimaryCategory = hasPrimary,
                                         hasSecondaryCategory = hasSecondary,
-                                hasTertiaryCategory = hasTertiary
-                                // Keep checked state: isDone = item.isDone
-                                    ))
+                                        hasTertiaryCategory = hasTertiary
+                                    )
                                 }
-                        // Show a confirmation toast
-                        /* Toast.makeText(
-                            context, 
-                            "Categories applied to ${itemsForSelectedDate.count { it.isDone }} items", 
-                            Toast.LENGTH_SHORT
-                        ).show() */
+                                if (updatedItems.isNotEmpty()) {
+                                    todoViewModel.updateItems(updatedItems)
+                                }
                             }
                         },
-                        selectedExpenses = itemsForSelectedDate.filter { it.isDone },
+                        selectedExpenses = remember(itemsForSelectedDate) {
+                            derivedStateOf { itemsForSelectedDate.filter { it.isDone } }
+                        }.value,
                         viewModel = todoViewModel
                     )
 
@@ -545,19 +602,6 @@ fun DedicatedExpenseListScreen(
             }
         }
         }
-    }
-
-    if (showImportConfirmDialog != null) {
-        ImportConfirmationDialog(
-            onDismiss = { showImportConfirmDialog = null },
-            onConfirm = {
-                val uri = showImportConfirmDialog
-                if (uri != null) {
-                    importBackup(context, uri, todoViewModel)
-                }
-                showImportConfirmDialog = null
-            }
-        )
     }
 
     if (editingItemId != null) {

@@ -20,6 +20,9 @@ interface TodoDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAndGetId(todoItem: TodoItem): Long
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertItems(todoItems: List<TodoItem>)
+
     @Update
     suspend fun update(todoItem: TodoItem)
 
@@ -46,7 +49,7 @@ interface TodoDao {
     suspend fun clearAndInsertTodoItems(items: List<TodoItem>) {
         Log.d("TodoDao", "clearAndInsertTodoItems called with ${items.size} items. Will call deleteAll().")
         deleteAll()
-        items.forEach { insert(it) }
+        insertItems(items)
     }
 
     @Transaction
@@ -55,7 +58,7 @@ interface TodoDao {
         val endOfNextDayMillis = targetDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         Log.d("TodoDao", "replaceTodoItemsForDate called for date: $targetDate with ${items.size} items. Will call deleteTodoItemsByTimestampRange.")
         deleteTodoItemsByTimestampRange(startOfDayMillis, endOfNextDayMillis)
-        items.forEach { insert(it) }
+        insertItems(items)
         Log.d("TodoDao", "replaceTodoItemsForDate finished for date: $targetDate")
     }
 
@@ -68,12 +71,15 @@ interface TodoDao {
         val endOfNextDayMillis = targetDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         Log.d("TodoDao", "clearAndSetItemsForDate: Deleting items for date range and inserting ${items.size} new items")
         deleteTodoItemsByTimestampRange(startOfDayMillis, endOfNextDayMillis)
-        items.forEach { insert(it) }
+        insertItems(items)
     }
 
     // CalculationRecord methods
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCalculationRecord(record: CalculationRecord)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCalculationRecords(records: List<CalculationRecord>)
 
     @Query("SELECT * FROM calculation_records ORDER BY isMasterSave DESC, timestamp DESC")
     fun getAllCalculationRecords(): kotlinx.coroutines.flow.Flow<List<CalculationRecord>>
@@ -110,15 +116,20 @@ interface TodoDao {
 
     @Transaction
     suspend fun deleteItems(items: List<TodoItem>) {
-        items.forEach { delete(it) }
+        if (items.isEmpty()) return
+        
+        // More efficient - performs a single DELETE operation
+        val itemIds = items.map { it.id }
+        deleteItemsByIds(itemIds)
     }
 
     @Transaction
     suspend fun clearAndInsertAllData(todoItems: List<TodoItem>, calculationRecords: List<CalculationRecord>) {
+        Log.d("TodoDao", "clearAndInsertAllData: Deleting all existing data and inserting ${todoItems.size} items and ${calculationRecords.size} records")
         deleteAll() // Deletes all TodoItems
         deleteAllCalculationRecords()
-        todoItems.forEach { insert(it) }
-        calculationRecords.forEach { insertCalculationRecord(it) }
+        insertItems(todoItems)
+        insertCalculationRecords(calculationRecords)
     }
 
     /**
@@ -149,4 +160,20 @@ interface TodoDao {
 
     @Query("SELECT * FROM todo_table WHERE id = :itemId")
     suspend fun getItemById(itemId: Int): TodoItem?
+
+    @Update
+    suspend fun updateItems(items: List<TodoItem>)
+
+    /**
+     * Bulk update calculation records in a single transaction
+     */
+    @Transaction
+    @Update
+    suspend fun updateCalculationRecords(records: List<CalculationRecord>)
+
+    /**
+     * Get items by category for efficient filtering
+     */
+    @Query("SELECT * FROM todo_table WHERE categories LIKE '%' || :category || '%' ORDER BY timestamp DESC")
+    suspend fun getItemsByCategory(category: String): List<TodoItem>
 }

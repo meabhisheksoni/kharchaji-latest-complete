@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,7 +54,6 @@ import com.example.monday.MainScreen
 import com.example.monday.DedicatedExpenseListScreen
 import com.example.monday.ShareScreen
 import com.example.monday.StatisticsScreen
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.BugReport
@@ -70,8 +70,17 @@ import java.time.ZoneId
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import com.example.monday.ui.screens.SettingsScreen
+import com.example.monday.AllExpensesScreen
+import com.example.monday.FindAndReplaceScreen
+import com.example.monday.MonthlyReportScreen
+import com.example.monday.CategoryFilterScreen
+import android.os.Build
+import androidx.annotation.RequiresApi
+import com.example.monday.ui.screens.MasterOnlyCategoriesScreen
+import com.example.monday.ui.screens.MasterCategoryDetailScreen
 
 class MainActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -100,12 +109,20 @@ object AppDestinations {
     const val EDIT_RECORD_DETAIL = "editrecorddetail"
     const val BATCH_SAVE_SCREEN = "batchsavescreen"
     const val SETTINGS_SCREEN = "settings"
+    const val ALL_EXPENSES = "allexpenses"
+    const val FIND_AND_REPLACE = "findandreplace"
+    const val MONTHLY_REPORT = "monthly_report"
+    const val CATEGORY_FILTER = "category_filter"
+    const val SPLASH = "splash"
+    const val MASTER_ONLY_CATEGORIES = "master_only_categories"
+    const val MASTER_CATEGORY_DETAIL = "master_category_detail/{category}"
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
-    val navController = androidx.navigation.compose.rememberNavController()
+    val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -151,7 +168,7 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
             }
         }
     ) { innerPadding ->
-        androidx.navigation.compose.NavHost(
+        NavHost(
             navController = navController,
             startDestination = AppDestinations.EXPENSE_LIST,
             modifier = Modifier.padding(innerPadding)
@@ -170,6 +187,9 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
                         val route = AppDestinations.calculationRecordsRoute(currentSelectedDateMillis)
                         Log.d("NavigationDebug", "Attempting route: $route")
                         navController.navigate(route)
+                    },
+                    onAllExpensesClick = {
+                        navController.navigate(AppDestinations.ALL_EXPENSES)
                     }
                 )
             }
@@ -181,7 +201,20 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
                 )
             }
             composable(AppDestinations.STATISTICS) {
-                StatisticsScreen()
+                StatisticsScreen(
+                    onNavigateToAllExpenses = {
+                        navController.navigate(AppDestinations.ALL_EXPENSES)
+                    },
+                    onNavigateToFindAndReplace = {
+                        navController.navigate(AppDestinations.FIND_AND_REPLACE)
+                    },
+                    onNavigateToMonthlyReport = {
+                        navController.navigate(AppDestinations.MONTHLY_REPORT)
+                    },
+                    onNavigateToCategories = {
+                        navController.navigate(AppDestinations.MASTER_ONLY_CATEGORIES)
+                    }
+                )
             }
             composable(AppDestinations.SHARE_SCREEN) {
                 val currentSelectedDate by todoViewModel.selectedDate.collectAsState()
@@ -264,10 +297,78 @@ fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
+            
+            composable(AppDestinations.ALL_EXPENSES) {
+                AllExpensesScreen(
+                    todoViewModel = todoViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            
+            composable(AppDestinations.FIND_AND_REPLACE) {
+                FindAndReplaceScreen(
+                    todoViewModel = todoViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            
+            composable(AppDestinations.MONTHLY_REPORT) {
+                val selectedCategories by navController
+                    .currentBackStackEntry!!
+                    .savedStateHandle
+                    .getLiveData<List<String>>("selected_categories")
+                    .observeAsState(emptyList())
+
+                MonthlyReportScreen(
+                    todoViewModel = todoViewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToFilter = {
+                        navController.navigate(AppDestinations.CATEGORY_FILTER)
+                    },
+                    selectedCategories = selectedCategories
+                )
+            }
+            composable(AppDestinations.CATEGORY_FILTER) {
+                val initialCategories = navController
+                    .previousBackStackEntry
+                    ?.savedStateHandle
+                    ?.get<List<String>>("selected_categories") ?: emptyList()
+                
+                CategoryFilterScreen(
+                    todoViewModel = todoViewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    initialSelectedCategories = initialCategories,
+                    onApplyFilters = { filters ->
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set("selected_categories", filters)
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable(AppDestinations.MASTER_ONLY_CATEGORIES) {
+                MasterOnlyCategoriesScreen(
+                    viewModel = todoViewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    onCategoryClick = { category ->
+                        navController.navigate("${AppDestinations.MASTER_CATEGORY_DETAIL}/$category")
+                    }
+                )
+            }
+
+            composable(AppDestinations.MASTER_CATEGORY_DETAIL) { backStackEntry ->
+                val category = backStackEntry.arguments?.getString("category") ?: ""
+                MasterCategoryDetailScreen(
+                    viewModel = todoViewModel,
+                    category = category,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Preview(showBackground = true)
 @Composable
 fun DefaultPreview() {

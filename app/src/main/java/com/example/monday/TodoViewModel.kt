@@ -7,22 +7,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.stateIn
-import java.time.LocalDate
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
-import java.time.ZoneId
-import kotlinx.coroutines.withContext
-import java.time.Instant
-import java.time.YearMonth
-import kotlinx.coroutines.flow.SharingStarted
-import com.example.monday.parseCategoryInfo
-import java.io.File
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneId
 
 class TodoViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: TodoRepository
@@ -32,16 +29,13 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     val selectedDate: StateFlow<LocalDate> = _selectedDate
 
-    // Modify to store items by date
     private val _undoableDeletedItemsByDate = MutableStateFlow<Map<LocalDate, List<TodoItem>>>(emptyMap())
-    
-    // Computed property to get undoable items only for the currently selected date
+
     private val _currentDateUndoItems = MutableStateFlow<List<TodoItem>>(emptyList())
     val undoableDeletedItems: StateFlow<List<TodoItem>> = _currentDateUndoItems
-    
+
     private val imageUpdateMutex = Mutex()
 
-    // StateFlows for categories
     private val _primaryCategories = MutableStateFlow<List<ExpenseCategory>>(emptyList())
     val primaryCategories: StateFlow<List<ExpenseCategory>> = _primaryCategories
 
@@ -51,11 +45,9 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     private val _tertiaryCategories = MutableStateFlow<List<ExpenseCategory>>(emptyList())
     val tertiaryCategories: StateFlow<List<ExpenseCategory>> = _tertiaryCategories
 
-    // Class-level variables to store the last category action for undo functionality
     private val _lastCategoryAction = MutableStateFlow<CategoryAction?>(null)
     val lastCategoryAction: StateFlow<CategoryAction?> = _lastCategoryAction
-    
-    // Sealed class for representing category actions for undo functionality
+
     sealed class CategoryAction {
         data class Added(val category: ExpenseCategory, val type: String) : CategoryAction()
         data class Edited(val oldCategory: ExpenseCategory, val newCategory: ExpenseCategory, val type: String) : CategoryAction()
@@ -67,17 +59,26 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         val todoDao = AppDatabase.getDatabase(application).todoDao()
         repository = TodoRepository(todoDao)
         viewModelScope.launch {
-            repository.getTodoItems().collectLatest { items ->
-                _todoItems.value = items.sortedBy { it.id }
+            try {
+                repository.getTodoItems().collectLatest { items ->
+                    _todoItems.value = items.sortedBy { it.id }
+                }
+            } catch (e: Exception) {
+                Log.e("KharchaJi", "Error collecting todo items", e)
+                _todoItems.value = emptyList()
             }
         }
-        // Load categories on init
         loadAllCategories()
         viewModelScope.launch {
-            kotlinx.coroutines.flow.combine(_undoableDeletedItemsByDate, _selectedDate) { itemsByDate, date ->
-                itemsByDate[date] ?: emptyList()
-            }.collect { items ->
-                _currentDateUndoItems.value = items
+            try {
+                kotlinx.coroutines.flow.combine(_undoableDeletedItemsByDate, _selectedDate) { itemsByDate, date ->
+                    itemsByDate[date] ?: emptyList()
+                }.collect { items ->
+                    _currentDateUndoItems.value = items
+                }
+            } catch (e: Exception) {
+                Log.e("KharchaJi", "Error collecting undo items", e)
+                _currentDateUndoItems.value = emptyList()
             }
         }
     }
@@ -88,112 +89,96 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         _tertiaryCategories.value = getSavedCategories("tertiary") ?: com.example.monday.ui.components.DefaultCategories.tertiaryCategories
     }
 
-    fun addItem(item: TodoItem) = viewModelScope.launch {
-        repository.insert(item)
+    fun addItem(item: TodoItem) = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            repository.insert(item)
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error adding item: ${item.text}", e)
+        }
     }
 
-    /**
-     * Adds an item to the database and returns its ID immediately
-     * This is useful when we need to get the ID right away for further operations
-     */
     suspend fun addItemAndGetId(item: TodoItem): Int {
         return repository.insertAndGetId(item)
     }
 
-    fun updateItem(updatedItem: TodoItem) = viewModelScope.launch {
-        Log.d("CategoryDebug", "Updating item with ID: ${updatedItem.id}")
-        Log.d("CategoryDebug", "Categories: ${updatedItem.categories}")
-        Log.d("CategoryDebug", "Primary: ${updatedItem.hasPrimaryCategory}, Secondary: ${updatedItem.hasSecondaryCategory}, Tertiary: ${updatedItem.hasTertiaryCategory}")
-        repository.update(updatedItem)
+    fun updateItem(updatedItem: TodoItem) = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            Log.d("CategoryDebug", "Updating item with ID: ${updatedItem.id}")
+            Log.d("CategoryDebug", "Categories: ${updatedItem.categories}")
+            Log.d("CategoryDebug", "Primary: ${updatedItem.hasPrimaryCategory}, Secondary: ${updatedItem.hasSecondaryCategory}, Tertiary: ${updatedItem.hasTertiaryCategory}")
+            repository.update(updatedItem)
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error updating item: ${updatedItem.id}", e)
+        }
     }
 
-    fun removeItem(item: TodoItem) = viewModelScope.launch {
-        addDeletedItemForCurrentDate(item)
-        repository.delete(item)
+    fun removeItem(item: TodoItem) = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            addDeletedItemForCurrentDate(item)
+            repository.delete(item)
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error removing item: ${item.text}", e)
+        }
     }
 
-    fun deleteSelectedItemsAndEnableUndo(itemsToDelete: List<TodoItem>) = viewModelScope.launch {
-        if (itemsToDelete.isEmpty()) return@launch
-        addDeletedItemsForCurrentDate(itemsToDelete)
-        val idsToDelete = itemsToDelete.map { it.id }
-        repository.deleteItemsByIds(idsToDelete)
+    fun deleteSelectedItemsAndEnableUndo(itemsToDelete: List<TodoItem>) = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            if (itemsToDelete.isEmpty()) return@launch
+            addDeletedItemsForCurrentDate(itemsToDelete)
+            val idsToDelete = itemsToDelete.map { it.id }
+            repository.deleteItemsByIds(idsToDelete)
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error deleting selected items", e)
+        }
     }
 
-    fun setAllItemsChecked(checked: Boolean) = viewModelScope.launch {
-        val currentItems = _todoItems.value
-        val updatedItems = currentItems.map { it.copy(isDone = checked) }
-        updatedItems.forEach { repository.update(it) }
+    fun setAllItemsChecked(checked: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            val currentItems = _todoItems.value
+            val updatedItems = currentItems.map { it.copy(isDone = checked) }
+            repository.updateItems(updatedItems)
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error setting all items checked: $checked", e)
+        }
     }
 
-    fun deleteAllItems() = viewModelScope.launch {
+    fun deleteAllItems() = viewModelScope.launch(Dispatchers.IO) {
         repository.deleteAll()
-        // Clear all undo history for all dates
         _undoableDeletedItemsByDate.value = emptyMap()
     }
 
-    fun deleteItemById(itemId: Int) = viewModelScope.launch {
+    fun deleteItemById(itemId: Int) = viewModelScope.launch(Dispatchers.IO) {
         repository.deleteItemById(itemId)
-        
-        // Remove the item from all dates' undo lists
         val updatedMap = _undoableDeletedItemsByDate.value.mapValues { (_, items) ->
             items.filter { it.id != itemId }
-        }.filter { (_, items) -> items.isNotEmpty() } // Keep only dates with items
-        
+        }.filter { (_, items) -> items.isNotEmpty() }
         _undoableDeletedItemsByDate.value = updatedMap
     }
 
-    /**
-     * Load record items as current expenses (adds to existing expenses)
-     */
-    fun loadRecordItemsAsCurrentExpenses(recordItems: List<RecordItem>, targetDate: LocalDate) = viewModelScope.launch {
+    fun loadRecordItemsAsCurrentExpenses(recordItems: List<RecordItem>, targetDate: LocalDate) = viewModelScope.launch(Dispatchers.IO) {
         Log.d("CategoryFix", "==== MERGE STARTED ====")
         Log.d("CategoryFix", "Total record items: ${recordItems.size}")
-        
-        // Log categories and images in each record item
         recordItems.forEachIndexed { index, item ->
             Log.d("CategoryFix", "RecordItem #$index: ${item.description}, Categories: ${item.categories}, Images: ${item.imageUris?.size ?: 0}")
         }
-
         val startOfDayMillis = targetDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-
-        // Get existing items
-        val existingItems = withContext(Dispatchers.IO) {
-            repository.getAllItemsForDateRange(startOfDayMillis, startOfDayMillis + 86400000 - 1)
-        }
-        
-        // Create a map of existing items by description+price+quantity for quick lookup
-        val existingItemsMap = existingItems.associateBy { 
+        val existingItems = repository.getAllItemsForDateRange(startOfDayMillis, startOfDayMillis + 86400000 - 1)
+        val existingItemsMap = existingItems.associateBy {
             val (name, quantity, price) = parseItemText(it.text)
             "$name|$price|${quantity ?: ""}"
         }
-        
         Log.d("CategoryFix", "Found ${existingItems.size} existing items")
-        
-        // Process each record item
         for (recordItem in recordItems) {
-            // Generate key for lookup
             val key = "${recordItem.description}|${recordItem.price}|${recordItem.quantity ?: ""}"
-            
-            // Check if we have a matching item
             val existingItem = existingItemsMap[key]
-            
             if (existingItem != null) {
-                // Item exists - update its categories and images if needed
                 Log.d("CategoryFix", "Found existing item: ${existingItem.text}")
-                
-                // If the record item has categories/images and they're different from existing ones
                 val needsUpdate = (!recordItem.categories.isNullOrEmpty() && existingItem.categories != recordItem.categories) ||
-                                  (!recordItem.imageUris.isNullOrEmpty() && existingItem.imageUris != recordItem.imageUris)
-                
+                        (!recordItem.imageUris.isNullOrEmpty() && existingItem.imageUris != recordItem.imageUris)
                 if (needsUpdate) {
                     Log.d("CategoryFix", "Updating item: ${existingItem.text}")
-                    
-                    // Generate the text with categories
                     val itemText = recordItemToTodoItemText(recordItem)
-                    
                     val (hasPrimaryCategory, hasSecondaryCategory, hasTertiaryCategory) = determineCategoryTypes(recordItem.categories)
-                    
-                    // Update the item with new categories and images
                     val updatedItem = existingItem.copy(
                         text = itemText,
                         categories = recordItem.categories,
@@ -202,24 +187,16 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                         hasSecondaryCategory = hasSecondaryCategory,
                         hasTertiaryCategory = hasTertiaryCategory
                     )
-                    
-                    withContext(Dispatchers.IO) {
-                        repository.update(updatedItem)
-                    }
+                    repository.update(updatedItem)
                     Log.d("CategoryFix", "Updated item with new data")
                 } else {
                     Log.d("CategoryFix", "No update needed")
                 }
             } else {
-                // Item doesn't exist - create a new one
                 Log.d("CategoryFix", "Creating new item: ${recordItem.description}")
-                
-                // Generate the text with categories
                 val itemText = recordItemToTodoItemText(recordItem)
-                
                 val finalCategories = recordItem.categories ?: parseCategoryInfo(itemText).second
                 val (hasPrimaryCategory, hasSecondaryCategory, hasTertiaryCategory) = determineCategoryTypes(finalCategories)
-                
                 val newItem = TodoItem(
                     text = itemText,
                     isDone = recordItem.isChecked,
@@ -230,201 +207,186 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                     hasSecondaryCategory = hasSecondaryCategory,
                     hasTertiaryCategory = hasTertiaryCategory
                 )
-                
-                withContext(Dispatchers.IO) {
-                    repository.insert(newItem)
-                }
+                repository.insert(newItem)
                 Log.d("CategoryFix", "Inserted new item")
             }
         }
-
         _undoableDeletedItemsByDate.value = _undoableDeletedItemsByDate.value.mapValues { it.value.filter { it.id != -1 } }
         updateSelectedDate(targetDate)
         Log.d("CategoryFix", "==== MERGE COMPLETED ====")
     }
-    
-    /**
-     * Clear all existing expenses and set only the record items
-     */
-    fun clearAndSetRecordItems(recordItems: List<RecordItem>, targetDate: LocalDate) = viewModelScope.launch {
+
+    fun clearAndSetRecordItems(recordItems: List<RecordItem>, targetDate: LocalDate) = viewModelScope.launch(Dispatchers.IO) {
         Log.d("CategoryFix", "==== CLEAR AND SET STARTED ====")
         Log.d("CategoryFix", "Total record items: ${recordItems.size}")
-        
-        // Log categories and images in each record item
         recordItems.forEachIndexed { index, item ->
             Log.d("CategoryFix", "RecordItem #$index: ${item.description}, Categories: ${item.categories}, Images: ${item.imageUris?.size ?: 0}")
         }
-        
         val startOfDayMillis = targetDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-
-        // Step 1: Get the exact items to delete
-        val itemsToDelete = withContext(Dispatchers.IO) {
-            repository.getAllItemsForDateRange(startOfDayMillis, startOfDayMillis + 86400000 - 1)
-        }
+        val itemsToDelete = repository.getAllItemsForDateRange(startOfDayMillis, startOfDayMillis + 86400000 - 1)
         val idsToDelete = itemsToDelete.map { it.id }
         Log.d("CategoryFix", "Found ${idsToDelete.size} items to delete.")
-
-        // Step 2: Perform deletion by IDs
         if (idsToDelete.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                repository.deleteItemsByIds(idsToDelete)
-            }
+            repository.deleteItemsByIds(idsToDelete)
             Log.d("CategoryFix", "Deleted items with IDs: $idsToDelete")
         }
-
-        // Step 3: Prepare and insert new items
         val newTodoItems = recordItems.map {
             val itemText = recordItemToTodoItemText(it)
             val finalCategories = it.categories ?: parseCategoryInfo(itemText).second
             val (hasPrimaryCategory, hasSecondaryCategory, hasTertiaryCategory) = determineCategoryTypes(finalCategories)
-            
             TodoItem(
                 text = itemText,
                 isDone = it.isChecked,
                 timestamp = startOfDayMillis,
                 categories = finalCategories,
-                imageUris = it.imageUris, // Carry over the image URIs
+                imageUris = it.imageUris,
                 hasPrimaryCategory = hasPrimaryCategory,
                 hasSecondaryCategory = hasSecondaryCategory,
                 hasTertiaryCategory = hasTertiaryCategory
             )
         }
-        
-        // Log the new TodoItems
         newTodoItems.forEachIndexed { index, item ->
             Log.d("CategoryFix", "New TodoItem #$index: Text: ${item.text}, Images: ${item.imageUris?.size ?: 0}")
         }
-        
-        withContext(Dispatchers.IO) {
-            newTodoItems.forEach { repository.insert(it) }
-        }
+        repository.insertItems(newTodoItems)
         Log.d("CategoryFix", "Finished inserting ${newTodoItems.size} new items.")
-
-        // Step 4: Update UI state
-        // Clear undo for target date after clearing and setting
         val targetDateMap = _undoableDeletedItemsByDate.value.toMutableMap()
         targetDateMap.remove(targetDate)
         _undoableDeletedItemsByDate.value = targetDateMap
-        
         updateSelectedDate(targetDate)
         Log.d("CategoryFix", "==== CLEAR AND SET COMPLETED ====")
     }
-    
-    // Helper function to determine category types
+
     private fun determineCategoryTypes(categories: List<String>?): Triple<Boolean, Boolean, Boolean> {
         if (categories.isNullOrEmpty()) {
             return Triple(false, false, false)
         }
-        
         val hasPrimary = categories.any { cat -> getSavedCategories("primary")?.any { it.name == cat } == true }
         val hasSecondary = categories.any { cat -> getSavedCategories("secondary")?.any { it.name == cat } == true }
         val hasTertiary = categories.any { cat -> getSavedCategories("tertiary")?.any { it.name == cat } == true }
-        
         val hasUnknown = categories.isNotEmpty() && !hasPrimary && !hasSecondary && !hasTertiary
-        
         return Triple(hasPrimary || hasUnknown, hasSecondary, hasTertiary)
     }
 
-    /**
-     * Convert a TodoItem to display text (for duplicate detection)
-     */
     private fun todoItemToDisplayText(todoItem: TodoItem): String {
         return todoItem.text.trim()
     }
 
-    // Helper method to add deleted items for the current date
     private fun addDeletedItemForCurrentDate(item: TodoItem) {
         val currentDate = _selectedDate.value
         val currentItems = _undoableDeletedItemsByDate.value[currentDate] ?: emptyList()
-        _undoableDeletedItemsByDate.value = _undoableDeletedItemsByDate.value + 
-            mapOf(currentDate to (listOf(item) + currentItems))
+        _undoableDeletedItemsByDate.value = _undoableDeletedItemsByDate.value +
+                mapOf(currentDate to (listOf(item) + currentItems))
     }
 
-    // Helper method to add multiple deleted items for the current date
     private fun addDeletedItemsForCurrentDate(items: List<TodoItem>) {
         if (items.isEmpty()) return
         val currentDate = _selectedDate.value
         val currentItems = _undoableDeletedItemsByDate.value[currentDate] ?: emptyList()
-        _undoableDeletedItemsByDate.value = _undoableDeletedItemsByDate.value + 
-            mapOf(currentDate to (items.reversed() + currentItems))
+        _undoableDeletedItemsByDate.value = _undoableDeletedItemsByDate.value +
+                mapOf(currentDate to (items.reversed() + currentItems))
     }
 
-    // Update the undo functionality for current date
     fun undoLastDelete() = viewModelScope.launch {
-        val currentDate = _selectedDate.value
-        val itemsForCurrentDate = _undoableDeletedItemsByDate.value[currentDate] ?: emptyList()
-        
-        if (itemsForCurrentDate.isNotEmpty()) {
-            val itemToRestore = itemsForCurrentDate.first()
-            repository.insert(itemToRestore)
-            
-            // Update the list for current date
-            val updatedItems = itemsForCurrentDate.drop(1)
-            val updatedMap = _undoableDeletedItemsByDate.value.toMutableMap()
-            if (updatedItems.isEmpty()) {
-                updatedMap.remove(currentDate)
-            } else {
-                updatedMap[currentDate] = updatedItems
+        try {
+            val currentDate = _selectedDate.value
+            val itemsForCurrentDate = _undoableDeletedItemsByDate.value[currentDate] ?: emptyList()
+            if (itemsForCurrentDate.isNotEmpty()) {
+                val itemToRestore = itemsForCurrentDate.first()
+                repository.insert(itemToRestore)
+                val updatedItems = itemsForCurrentDate.drop(1)
+                val updatedMap = _undoableDeletedItemsByDate.value.toMutableMap()
+                if (updatedItems.isEmpty()) {
+                    updatedMap.remove(currentDate)
+                } else {
+                    updatedMap[currentDate] = updatedItems
+                }
+                _undoableDeletedItemsByDate.value = updatedMap
             }
-            _undoableDeletedItemsByDate.value = updatedMap
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error undoing last delete", e)
         }
     }
 
-    // Clear deleted items for current date
     fun clearLastDeletedItem() = viewModelScope.launch {
-        val currentDate = _selectedDate.value
-        val updatedMap = _undoableDeletedItemsByDate.value.toMutableMap()
-        updatedMap.remove(currentDate)
-        _undoableDeletedItemsByDate.value = updatedMap
+        try {
+            val currentDate = _selectedDate.value
+            Log.d("KharchaJi", "Clearing last deleted items for date: $currentDate")
+            val updatedMap = _undoableDeletedItemsByDate.value.toMutableMap()
+            updatedMap.remove(currentDate)
+            _undoableDeletedItemsByDate.value = updatedMap
+            Log.d("KharchaJi", "Successfully cleared deleted items for date: $currentDate")
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error clearing last deleted item", e)
+        }
     }
 
-    // CalculationRecord methods
-    val allCalculationRecords: kotlinx.coroutines.flow.StateFlow<List<CalculationRecord>> = repository.allCalculationRecords
-        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
+    val allCalculationRecords: StateFlow<List<CalculationRecord>> = repository.allCalculationRecords
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun insertCalculationRecord(record: CalculationRecord) = viewModelScope.launch {
-        repository.insertCalculationRecord(record)
+        try {
+            repository.insertCalculationRecord(record)
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error inserting calculation record", e)
+        }
     }
 
-    fun getCalculationRecordById(id: Int): kotlinx.coroutines.flow.StateFlow<CalculationRecord?> {
+    fun getCalculationRecordById(id: Int): StateFlow<CalculationRecord?> {
         return repository.getCalculationRecordById(id)
-            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), null)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     }
 
     fun deleteCalculationRecord(record: CalculationRecord) = viewModelScope.launch {
-        repository.deleteCalculationRecord(record)
+        try {
+            Log.d("KharchaJi", "Deleting calculation record: ${record.id}")
+            repository.deleteCalculationRecord(record)
+            Log.d("KharchaJi", "Successfully deleted calculation record: ${record.id}")
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error deleting calculation record: ${record.id}", e)
+        }
     }
 
     fun deleteCalculationRecordById(recordId: Int) = viewModelScope.launch {
-        repository.deleteCalculationRecordById(recordId)
+        try {
+            Log.d("KharchaJi", "Deleting calculation record by ID: $recordId")
+            repository.deleteCalculationRecordById(recordId)
+            Log.d("KharchaJi", "Successfully deleted calculation record by ID: $recordId")
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error deleting calculation record by ID: $recordId", e)
+        }
     }
 
     fun deleteAllCalculationRecords() = viewModelScope.launch {
-        repository.deleteAllCalculationRecords()
+        try {
+            Log.d("KharchaJi", "Deleting all calculation records")
+            repository.deleteAllCalculationRecords()
+            Log.d("KharchaJi", "Successfully deleted all calculation records")
+        } catch (e: Exception) {
+            Log.e("KharchaJi", "Error deleting all calculation records", e)
+        }
     }
 
-    fun getCalculationRecordsForDate(date: LocalDate): kotlinx.coroutines.flow.Flow<List<CalculationRecord>> {
+    fun getCalculationRecordsForDate(date: LocalDate): Flow<List<CalculationRecord>> {
         val startOfDayMillis = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfDayMillis = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
         return repository.getCalculationRecordsForDateRange(startOfDayMillis, endOfDayMillis)
     }
 
-    fun getMasterRecordForDate(date: LocalDate): kotlinx.coroutines.flow.Flow<CalculationRecord?> {
+    fun getMasterRecordForDate(date: LocalDate): Flow<CalculationRecord?> {
         val startOfDayMillis = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfDayMillis = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
         Log.d("CalendarDebug", "VM: getMasterRecordForDate for $date (Millis: $startOfDayMillis to $endOfDayMillis)")
         return repository.getMasterSaveRecordForDate(startOfDayMillis, endOfDayMillis)
     }
 
-    // Function to get expenses for a specific date
     fun getExpensesForDate(date: LocalDate): StateFlow<List<TodoItem>> {
         val startOfDayMillis = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfDayMillis = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
-
         val filteredItems = MutableStateFlow<List<TodoItem>>(emptyList())
         viewModelScope.launch {
             _todoItems.collectLatest { allItems ->
-                filteredItems.value = allItems.filter { 
+                filteredItems.value = allItems.filter {
                     it.timestamp >= startOfDayMillis && it.timestamp <= endOfDayMillis
                 }
             }
@@ -436,7 +398,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         val firstDayOfMonth = currentDate.withDayOfMonth(1)
         val startOfMonthMillis = firstDayOfMonth.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfCurrentDateMillis = currentDate.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
-
         val filteredItems = MutableStateFlow<List<TodoItem>>(emptyList())
         viewModelScope.launch {
             _todoItems.collectLatest { allItems ->
@@ -460,178 +421,200 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         _selectedDate.value = _selectedDate.value.minusDays(1)
     }
 
-    // Alias for updateSelectedDate for cleaner code
     fun setDate(date: LocalDate) {
         updateSelectedDate(date)
     }
 
-    // Get all expenses for export
     suspend fun getAllExpensesForExport(): List<TodoItem> {
         Log.d("ExportBackup", "Fetching all expenses directly from database")
-        return withContext(Dispatchers.IO) {
-            val items = repository.getAllItems()
-            Log.d("ExportBackup", "Retrieved ${items.size} expenses from database")
-            
-            // Log items with categories
-            val itemsWithCategories = items.filter { !it.categories.isNullOrEmpty() }
-            Log.d("ExportBackup", "Found ${itemsWithCategories.size} items with categories")
-            
-            items
-        }
+        return repository.getAllItems()
     }
 
     suspend fun getAllCalculationRecordsForExport(): List<CalculationRecord> {
         Log.d("ExportBackup", "Fetching all calculation records directly from database")
-        val records = repository.getAllCalculationRecordsForExport()
-        
-        // Log records with items that have categories
-        val recordsWithCategories = records.filter { record -> 
-            record.items.any { !it.categories.isNullOrEmpty() }
+        return repository.getAllCalculationRecordsForExport()
+    }
+
+    suspend fun getUncategorizedExpenses(): List<TodoItem> {
+        Log.d("UncategorizedExpenses", "Fetching all uncategorized expenses")
+        val allItems = repository.getAllItems()
+        return allItems.filter { it.categories.isNullOrEmpty() }
+    }
+
+    suspend fun getExpensesWithLessThanThreeCategories(): List<TodoItem> {
+        Log.d("CategoryExpenses", "Fetching expenses with less than three categories")
+        val allItems = repository.getAllItems()
+        return allItems.filter { 
+            !it.categories.isNullOrEmpty() && it.categories!!.size < 3 
         }
-        Log.d("ExportBackup", "Found ${recordsWithCategories.size} records containing items with categories")
-        
-        return records
+    }
+    
+    suspend fun getExpensesWithMoreThanThreeCategories(): List<TodoItem> {
+        Log.d("CategoryExpenses", "Fetching expenses with more than three categories")
+        val allItems = repository.getAllItems()
+        return allItems.filter { 
+            !it.categories.isNullOrEmpty() && it.categories!!.size > 3 
+        }
+    }
+    
+    suspend fun getExpensesWithExactlyThreeCategories(): List<TodoItem> {
+        Log.d("CategoryExpenses", "Fetching expenses with exactly three categories")
+        val allItems = repository.getAllItems()
+        return allItems.filter { 
+            !it.categories.isNullOrEmpty() && it.categories!!.size == 3 
+        }
+    }
+
+    suspend fun getAllUniqueCategories(): List<String> {
+        Log.d("Categories", "Fetching all unique categories from database")
+        val allItems = repository.getAllItems()
+        val allCategories = allItems
+            .mapNotNull { it.categories }
+            .flatten()
+        return allCategories.distinct().sorted()
+    }
+
+    suspend fun getPrimaryCategories(): List<String> {
+        Log.d("Categories", "Fetching only primary categories for export dialog")
+        try {
+            val primaryCats = getSavedCategories("primary")?.map { it.name } ?: emptyList()
+            Log.d("Categories", "Found ${primaryCats.size} primary categories defined in settings")
+            
+            if (primaryCats.isEmpty()) {
+                Log.d("Categories", "No primary categories defined in settings")
+                return emptyList()
+            }
+            
+            val allItems = repository.getAllItems()
+            Log.d("Categories", "Fetched ${allItems.size} total items from repository")
+            
+            val usedCategories = allItems
+                .mapNotNull { it.categories }
+                .flatten()
+                .distinct()
+            
+            Log.d("Categories", "Found ${usedCategories.size} unique categories across all expenses")
+            
+            val result = usedCategories.filter { primaryCats.contains(it) }.sorted()
+            Log.d("Categories", "Returning ${result.size} primary categories that are actually used in expenses")
+            
+            return result
+        } catch (e: Exception) {
+            Log.e("Categories", "Error fetching primary categories", e)
+            return emptyList()
+        }
+    }
+
+    suspend fun getAllCategoriesByType(): Map<String, List<String>> {
+        Log.d("Categories", "Fetching all categories by type for HTML export")
+        val primaryCats = getSavedCategories("primary")?.map { it.name } ?: emptyList()
+        val secondaryCats = getSavedCategories("secondary")?.map { it.name } ?: emptyList()
+        val tertiaryCats = getSavedCategories("tertiary")?.map { it.name } ?: emptyList()
+        val allItems = repository.getAllItems()
+        val usedCategories = allItems
+            .mapNotNull { it.categories }
+            .flatten()
+            .distinct()
+        val usedPrimaryCategories = usedCategories.filter { primaryCats.contains(it) }.sorted()
+        val usedSecondaryCategories = usedCategories.filter { secondaryCats.contains(it) }.sorted()
+        val usedTertiaryCategories = usedCategories.filter { tertiaryCats.contains(it) }.sorted()
+        val uncategorizedCategories = usedCategories.filter {
+            !primaryCats.contains(it) && !secondaryCats.contains(it) && !tertiaryCats.contains(it)
+        }.sorted()
+        return mapOf(
+            "primary" to usedPrimaryCategories,
+            "secondary" to usedSecondaryCategories,
+            "tertiary" to usedTertiaryCategories,
+            "other" to uncategorizedCategories
+        )
     }
 
     fun clearAndInsertAllData(todoItems: List<TodoItem>, calculationRecords: List<CalculationRecord>) = viewModelScope.launch(Dispatchers.IO) {
         Log.d("ImportBackup", "Starting clearAndInsertAllData")
         Log.d("ImportBackup", "Inserting ${todoItems.size} todo items and ${calculationRecords.size} calculation records")
-        
-        // Log items with categories
         val itemsWithCategories = todoItems.filter { !it.categories.isNullOrEmpty() }
         Log.d("ImportBackup", "Found ${itemsWithCategories.size} items with categories")
-        
-        // Log records with items that have categories
-        val recordsWithCategories = calculationRecords.filter { record -> 
+        val recordsWithCategories = calculationRecords.filter { record ->
             record.items.any { !it.categories.isNullOrEmpty() }
         }
         Log.d("ImportBackup", "Found ${recordsWithCategories.size} records containing items with categories")
-        
-        // Execute the database transaction
         repository.clearAndInsertAllData(todoItems, calculationRecords)
         Log.d("ImportBackup", "Completed clearAndInsertAllData")
     }
 
-    /**
-     * Gets all TodoItems for a date range directly from the database.
-     * This is a suspend function that fetches data synchronously for the batch save process.
-     */
     suspend fun getAllItemsForDateRange(startOfDayMillis: Long, endOfDayMillis: Long): List<TodoItem> {
-        return repository.getAllItemsForDateRange(startOfDayMillis, endOfDayMillis)
+        return withContext(Dispatchers.IO) {
+            repository.getAllItemsForDateRange(startOfDayMillis, endOfDayMillis)
+        }
     }
-    
-    /**
-     * Non-suspend version of insertCalculationRecordIfNotDuplicate for compatibility
-     */
+
     fun insertCalculationRecordIfNotDuplicateAsync(record: CalculationRecord) = viewModelScope.launch {
         insertCalculationRecordIfNotDuplicate(record)
     }
 
-    /**
-     * Inserts a calculation record only if it's not a duplicate of an existing record.
-     * Returns true if a new record was created, false if a duplicate was found.
-     */
     suspend fun insertCalculationRecordIfNotDuplicate(record: CalculationRecord): Boolean {
         Log.d("DuplicateCheck", "====== CHECKING FOR DUPLICATES ======")
-        
-        // Get all existing non-master records for this date
         val recordDate = record.recordDate.toLocalDate()
         val startOfDay = recordDate.toEpochMilli()
         val endOfDay = recordDate.plusDays(1).toEpochMilli() - 1
-        
-        // Get records directly from the database to avoid any caching issues
         val existingRecords = repository.getAllCalculationRecordsForDateRangeDirect(startOfDay, endOfDay)
             .filter { !it.isMasterSave }
-        
         Log.d("DuplicateCheck", "Found ${existingRecords.size} existing non-master records for date: $recordDate")
-        
-        // Simplify each item to a basic string representation (description + price + quantity)
-        val newRecordItems = record.items.map { 
+        val newRecordItems = record.items.map {
             "${it.description.trim()}|${it.price.trim()}|${it.quantity?.trim() ?: ""}"
         }.sorted()
-        
         Log.d("DuplicateCheck", "New record has ${newRecordItems.size} items")
-        
-        // Check each existing record for duplicate items
         for (existingRecord in existingRecords) {
-            val existingItems = existingRecord.items.map { 
+            val existingItems = existingRecord.items.map {
                 "${it.description.trim()}|${it.price.trim()}|${it.quantity?.trim() ?: ""}"
             }.sorted()
-            
             Log.d("DuplicateCheck", "Comparing with record #${existingRecord.id} (${existingItems.size} items)")
-            
-            // Check if all items match
             if (newRecordItems.size == existingItems.size && newRecordItems == existingItems) {
                 Log.d("DuplicateCheck", "DUPLICATE FOUND: Record #${existingRecord.id} has identical items")
                 return false
             }
         }
-        
-        // No duplicate found, insert the new record
         Log.d("DuplicateCheck", "No duplicates found, creating new record")
         repository.insertCalculationRecord(record)
         return true
     }
 
-    /**
-     * Saves all expenses for a date to a master save record.
-     * If a master save record already exists for this date, it will be updated.
-     * Additionally creates a regular save record only if no identical record exists.
-     * 
-     * @return Pair<Boolean, Boolean> - First boolean indicates if a regular record was created,
-     * second indicates if a master record was created or updated
-     */
     suspend fun saveToMasterRecord(date: LocalDate, allItems: List<TodoItem>): Pair<Boolean, Boolean> {
         val recordItems = allItems.map { todoItemToRecordItem(it) }
         if (recordItems.isEmpty()) {
             return Pair(false, false)
         }
-        
-        // Calculate totals
         val totalSum = recordItems.sumOf { it.price.toDoubleOrNull() ?: 0.0 }
         val checkedItems = recordItems.filter { it.isChecked }
         val checkedItemsCount = checkedItems.size
         val checkedItemsSum = checkedItems.sumOf { it.price.toDoubleOrNull() ?: 0.0 }
-        
-        // Variable to track if we created/updated records
         var regularRecordCreated = false
         var masterRecordCreatedOrUpdated = false
-        
-        // First check if we should create a regular record using our improved duplicate detection
         Log.d("MasterSave", "Checking for existing regular records with identical items")
-        
-        // Get all existing non-master records for this date directly from DB
         val startOfDayMillis = date.toEpochMilli()
         val endOfDayMillis = date.plusDays(1).toEpochMilli() - 1
         val existingRegularRecords = repository.getAllCalculationRecordsForDateRangeDirect(
             startOfDayMillis, endOfDayMillis
         ).filter { !it.isMasterSave }
-        
         Log.d("MasterSave", "Found ${existingRegularRecords.size} existing regular records for date: $date")
-        
-        // Check if any existing record has identical items
-        val newRecordItems = recordItems.map { 
+        val newRecordItems = recordItems.map {
             val categoriesPart = it.categories?.joinToString(",") ?: ""
             val imagesPart = it.imageUris?.sorted()?.joinToString(",") ?: ""
             "${it.description.trim()}|${it.price.trim()}|${it.quantity?.trim() ?: ""}|$categoriesPart|$imagesPart"
         }.sorted()
-        
         var duplicateFound = false
         for (existingRecord in existingRegularRecords) {
-            val existingItems = existingRecord.items.map { 
+            val existingItems = existingRecord.items.map {
                 val categoriesPart = it.categories?.joinToString(",") ?: ""
                 val imagesPart = it.imageUris?.sorted()?.joinToString(",") ?: ""
                 "${it.description.trim()}|${it.price.trim()}|${it.quantity?.trim() ?: ""}|$categoriesPart|$imagesPart"
             }.sorted()
-            
             if (newRecordItems.size == existingItems.size && newRecordItems == existingItems) {
                 Log.d("MasterSave", "Found identical regular record #${existingRecord.id}, skipping creation")
                 duplicateFound = true
                 break
             }
         }
-        
-        // Create regular record only if no duplicate found
         if (!duplicateFound) {
             val regularRecord = CalculationRecord(
                 items = recordItems,
@@ -645,39 +628,22 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             regularRecordCreated = true
             Log.d("MasterSave", "Created new regular record")
         }
-        
-        // Now handle the master record
         val existingMasterRecords = repository.getMasterSaveRecordsForDateRange(
             startOfDayMillis, endOfDayMillis
         )
-        
         if (existingMasterRecords.isNotEmpty()) {
-            // Update existing master record
             val existingMaster = existingMasterRecords.first()
             Log.d("MasterSave", "Found existing master record #${existingMaster.id}")
-            
-            // Create new master items list by combining existing and new items
             val updatedMasterItems = mutableListOf<RecordItem>()
-            
-            // Create maps for efficient lookups
-            // 1. Map of existing items by sourceItemId (for direct matches)
             val existingItemsBySourceId = existingMaster.items
                 .filter { it.sourceItemId != null }
                 .associateBy { it.sourceItemId }
-            
-            // 2. Map of existing items by name (case-insensitive) for fallback matching
             val existingItemsByName = existingMaster.items
                 .groupBy { it.description.trim().lowercase() }
-            
-            // Track which existing items have been processed
             val processedExistingItems = mutableSetOf<RecordItem>()
-            
-            // Process each new item
             for (newItem in recordItems) {
                 var matchFound = false
                 var bestMatchItem: RecordItem? = null
-                
-                // FIRST MATCHING STRATEGY: Match by sourceItemId (most reliable)
                 if (newItem.sourceItemId != null) {
                     bestMatchItem = existingItemsBySourceId[newItem.sourceItemId]
                     if (bestMatchItem != null) {
@@ -685,14 +651,10 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                         Log.d("MasterSave", "Found match by sourceItemId: ${newItem.sourceItemId} for '${newItem.description}'")
                     }
                 }
-                
-                // SECOND MATCHING STRATEGY: Match by name if no sourceItemId match
                 if (!matchFound) {
                     val normalizedName = newItem.description.trim().lowercase()
                     val matchingExistingItems = existingItemsByName[normalizedName]
-                    
                     if (matchingExistingItems != null && matchingExistingItems.isNotEmpty()) {
-                        // Find the first item that hasn't been processed yet
                         bestMatchItem = matchingExistingItems.firstOrNull { it !in processedExistingItems }
                         if (bestMatchItem != null) {
                             matchFound = true
@@ -700,20 +662,12 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
-                
-                // THIRD MATCHING STRATEGY: Try fuzzy matching if still no match
                 if (!matchFound) {
-                    // Try to find a match by price and similar name
                     for (existingItem in existingMaster.items) {
-                        // Skip items that have already been processed
                         if (existingItem in processedExistingItems) continue
-                        
-                        // Check if prices match
                         if (existingItem.price.trim() == newItem.price.trim()) {
-                            // Check if names are similar
                             val existingNameLower = existingItem.description.trim().lowercase()
                             val newNameLower = newItem.description.trim().lowercase()
-                            
                             if (existingNameLower.contains(newNameLower) || newNameLower.contains(existingNameLower)) {
                                 bestMatchItem = existingItem
                                 matchFound = true
@@ -723,52 +677,37 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
-                
                 if (matchFound && bestMatchItem != null) {
-                    // Mark this existing item as processed
                     processedExistingItems.add(bestMatchItem)
-                    
-                    // Update the item with new values but keep the original sourceItemId if the new one is null
                     val finalSourceItemId = newItem.sourceItemId ?: bestMatchItem.sourceItemId
-                    
                     val updatedItem = bestMatchItem.copy(
-                        description = newItem.description, // Update the name
+                        description = newItem.description,
                         price = newItem.price,
                         quantity = newItem.quantity,
                         categories = newItem.categories,
                         imageUris = newItem.imageUris,
                         isChecked = newItem.isChecked,
-                        sourceItemId = finalSourceItemId // Preserve item identity
+                        sourceItemId = finalSourceItemId
                     )
-                    
                     Log.d("MasterSave", "Updating existing item: '${bestMatchItem.description}' -> '${newItem.description}' (price: ${bestMatchItem.price} -> ${newItem.price})")
                     updatedMasterItems.add(updatedItem)
                 } else {
-                    // No match found, add as a new item
                     Log.d("MasterSave", "Adding new item to master record: ${newItem.description}")
                     updatedMasterItems.add(newItem)
                 }
             }
-            
-            // Add any remaining existing items that weren't matched
             val remainingItems = existingMaster.items.filter { it !in processedExistingItems }
             if (remainingItems.isNotEmpty()) {
                 Log.d("MasterSave", "Adding ${remainingItems.size} unmatched existing items to master record")
                 updatedMasterItems.addAll(remainingItems)
             }
-            
-            // Recalculate the total sum based on all items
             val updatedTotalSum = updatedMasterItems.sumOf { it.price.toDoubleOrNull() ?: 0.0 }
-            
-            // Compare master record items to see if they actually changed
             val masterItemsChanged = !areItemListsIdentical(existingMaster.items, updatedMasterItems)
-            
-            // Only update if there are changes
             if (masterItemsChanged) {
                 val updatedMaster = existingMaster.copy(
                     items = updatedMasterItems,
                     totalSum = updatedTotalSum,
-                    timestamp = System.currentTimeMillis() // Update timestamp
+                    timestamp = System.currentTimeMillis()
                 )
                 repository.updateCalculationRecord(updatedMaster)
                 masterRecordCreatedOrUpdated = true
@@ -776,9 +715,7 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 Log.d("MasterSave", "No changes to master record, skipping update")
             }
-            
         } else {
-            // Create new master record with all items
             val masterRecord = CalculationRecord(
                 items = recordItems,
                 totalSum = totalSum,
@@ -791,61 +728,41 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             masterRecordCreatedOrUpdated = true
             Log.d("MasterSave", "Created new master record")
         }
-        
         return Pair(regularRecordCreated, masterRecordCreatedOrUpdated)
     }
-    
-    /**
-     * Helper method to check if two lists of RecordItems have identical contents
-     * (ignoring order and comparing description, price, quantity, and categories)
-     */
+
     private fun areItemListsIdentical(items1: List<RecordItem>, items2: List<RecordItem>): Boolean {
         if (items1.size != items2.size) return false
-        
-        val items1Simplified = items1.map { 
+        val items1Simplified = items1.map {
             val categoriesPart = it.categories?.joinToString(",") ?: ""
             val imagesPart = it.imageUris?.sorted()?.joinToString(",") ?: ""
             "${it.description.trim()}|${it.price.trim()}|${it.quantity?.trim() ?: ""}|$categoriesPart|$imagesPart"
         }.sorted()
-        
-        val items2Simplified = items2.map { 
+        val items2Simplified = items2.map {
             val categoriesPart = it.categories?.joinToString(",") ?: ""
             val imagesPart = it.imageUris?.sorted()?.joinToString(",") ?: ""
             "${it.description.trim()}|${it.price.trim()}|${it.quantity?.trim() ?: ""}|$categoriesPart|$imagesPart"
         }.sorted()
-        
         return items1Simplified == items2Simplified
     }
 
-    /**
-     * Non-suspend version of saveToMasterRecord for compatibility with existing code
-     */
     fun saveToMasterRecordAsync(date: LocalDate, allItems: List<TodoItem>) = viewModelScope.launch {
         saveToMasterRecord(date, allItems)
     }
 
-    /**
-     * Updates a calculation record in the database
-     */
     fun updateCalculationRecord(record: CalculationRecord) = viewModelScope.launch {
         repository.updateCalculationRecord(record)
     }
-    
-    /**
-     * Removes an item at the specified index from a record and returns the updated record
-     */
+
     suspend fun removeRecordItem(record: CalculationRecord, index: Int): CalculationRecord {
         val updatedItems = record.items.toMutableList()
         if (index >= 0 && index < updatedItems.size) {
             updatedItems.removeAt(index)
         }
-        
-        // Recalculate totals
         val totalSum = updatedItems.sumOf { it.price.toDoubleOrNull() ?: 0.0 }
         val checkedItems = updatedItems.filter { it.isChecked }
         val checkedItemsCount = checkedItems.size
         val checkedItemsSum = checkedItems.sumOf { it.price.toDoubleOrNull() ?: 0.0 }
-        
         return record.copy(
             items = updatedItems,
             totalSum = totalSum,
@@ -854,34 +771,30 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             timestamp = System.currentTimeMillis()
         )
     }
-    
-    /**
-     * Adds a new item to a record and returns the updated record
-     */
+
     suspend fun addRecordItem(
-        record: CalculationRecord, 
-        description: String, 
+        record: CalculationRecord,
+        description: String,
         price: String,
         quantity: String?,
         categories: List<String>? = null,
         sourceItemId: Int? = null
     ): CalculationRecord {
         val updatedItems = record.items.toMutableList()
-        updatedItems.add(RecordItem(
-            description = description,
-            price = price,
-            quantity = quantity,
-            isChecked = false,
-            categories = categories,
-            sourceItemId = sourceItemId
-        ))
-        
-        // Recalculate totals
+        updatedItems.add(
+            RecordItem(
+                description = description,
+                price = price,
+                quantity = quantity,
+                isChecked = false,
+                categories = categories,
+                sourceItemId = sourceItemId
+            )
+        )
         val totalSum = updatedItems.sumOf { it.price.toDoubleOrNull() ?: 0.0 }
         val checkedItems = updatedItems.filter { it.isChecked }
         val checkedItemsCount = checkedItems.size
         val checkedItemsSum = checkedItems.sumOf { it.price.toDoubleOrNull() ?: 0.0 }
-        
         return record.copy(
             items = updatedItems,
             totalSum = totalSum,
@@ -890,26 +803,19 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             timestamp = System.currentTimeMillis()
         )
     }
-    
-    /**
-     * Updates an item at the specified index in a record and returns the updated record
-     */
+
     suspend fun updateRecordItem(
-        record: CalculationRecord, 
-        index: Int, 
-        description: String, 
+        record: CalculationRecord,
+        index: Int,
+        description: String,
         price: String,
         quantity: String?,
         categories: List<String>? = null
     ): CalculationRecord {
         val updatedItems = record.items.toMutableList()
         if (index >= 0 && index < updatedItems.size) {
-            // Preserve categories if not explicitly provided
             val itemCategories = categories ?: updatedItems[index].categories
-            
-            // Preserve the sourceItemId
             val sourceItemId = updatedItems[index].sourceItemId
-            
             updatedItems[index] = RecordItem(
                 description = description,
                 price = price,
@@ -920,13 +826,10 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 sourceItemId = sourceItemId
             )
         }
-        
-        // Recalculate totals
         val totalSum = updatedItems.sumOf { it.price.toDoubleOrNull() ?: 0.0 }
         val checkedItems = updatedItems.filter { it.isChecked }
         val checkedItemsCount = checkedItems.size
         val checkedItemsSum = checkedItems.sumOf { it.price.toDoubleOrNull() ?: 0.0 }
-        
         return record.copy(
             items = updatedItems,
             totalSum = totalSum,
@@ -937,154 +840,143 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Get master record totals for all days in a month to be shown in the calendar.
-     * This bypasses all caching mechanisms and directly queries the database.
+     * Get master record totals for a specific month, grouped by category
+     * This is used by the Monthly Report screen to show bars based on master records
      */
     suspend fun getMasterRecordTotalsForMonth(yearMonth: YearMonth): Map<String, Double> {
         return withContext(Dispatchers.IO) {
             val result = mutableMapOf<String, Double>()
+            
             try {
-                // Calculate start and end of month in milliseconds
                 val startOfMonthMillis = yearMonth.atDay(1)
                     .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                
-                val endOfMonthMillis = yearMonth.atDay(yearMonth.lengthOfMonth())
+                val endOfMonthMillis = yearMonth.atEndOfMonth()
                     .plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
                 
-                Log.d("CalendarFix", "-------------- BEGIN CALENDAR DATA FETCH --------------")
-                Log.d("CalendarFix", "Querying for month: $yearMonth ($startOfMonthMillis - $endOfMonthMillis)")
+                // Get all master records for this month
+                val records = repository.getMasterRecordsForDateRange(startOfMonthMillis, endOfMonthMillis)
+                Log.d("MasterRecords", "Found ${records.size} master records for month: $yearMonth")
                 
-                // Step 1: Get ALL calculation records for the month
-                val allRecords = repository.getAllCalculationRecordsForDateRangeDirect(
-                    startOfMonthMillis, endOfMonthMillis
-                )
-                
-                Log.d("CalendarFix", "Total records found: ${allRecords.size}")
-                Log.d("CalendarFix", "Master records: ${allRecords.count { it.isMasterSave }}")
-                Log.d("CalendarFix", "Regular records: ${allRecords.count { !it.isMasterSave }}")
-                
-                // Create a map where key = date string and value = list of records for that date
-                val recordsByDate = allRecords.groupBy { record ->
-                    val date = Instant.ofEpochMilli(record.recordDate)
-                        .atZone(ZoneId.systemDefault())
-                        .toLocalDate()
-                    date.toString()
-                }
-                
-                Log.d("CalendarFix", "Dates with records: ${recordsByDate.keys}")
-                
-                // For each date, take the most recent master record only
-                recordsByDate.forEach { (dateStr, records) ->
-                    // First, try to find master records
-                    val masterRecords = records.filter { it.isMasterSave }
-                    
-                    if (masterRecords.isNotEmpty()) {
-                        // Get the master record with the highest timestamp (most recent)
-                        val mostRecentMaster = masterRecords.maxBy { it.timestamp }
-                        result[dateStr] = mostRecentMaster.totalSum
+                // Process each record
+                records.forEach { record ->
+                    // Process each item in the record
+                    record.items.forEach { item ->
+                        // Skip if no categories or price is null
+                        if (item.categories.isNullOrEmpty() || item.price == null) return@forEach
                         
-                        Log.d("CalendarFix", "✅ DATE: $dateStr - Using MASTER record ID=${mostRecentMaster.id}, " +
-                              "totalSum=${mostRecentMaster.totalSum}, timestamp=${mostRecentMaster.timestamp}")
-                    } else {
-                        // If no master records, don't add anything to the result map
-                        // This ensures only master records are shown in the calendar
-                        Log.d("CalendarFix", "❌ DATE: $dateStr - No master records found, skipping")
+                        // Convert price to Double
+                        val price = item.price.toDoubleOrNull() ?: return@forEach
+                        Log.d("MasterRecords", "Processing item: ${item.description} with price: $price and categories: ${item.categories}")
+                        
+                        // First, include the category directly as it appears in the item
+                        // This ensures we catch categories that might be stored directly
+                        item.categories.forEach { category ->
+                            result[category] = (result[category] ?: 0.0) + price
+                        }
+                        
+                        // Then also process through hierarchy for nested category handling
+                        val (primary, secondary, tertiary) = intelligentlyCategorize(item.categories.toSet())
+                            .let { (p, s, t) -> Triple(p.toSet(), s.toSet(), t.toSet()) }
+                        
+                        primary.forEach { category ->
+                            if (!item.categories.contains(category)) { // Avoid double-counting
+                                result[category] = (result[category] ?: 0.0) + price
+                            }
+                        }
+                        
+                        secondary.forEach { category ->
+                            if (!item.categories.contains(category)) { // Avoid double-counting
+                                result[category] = (result[category] ?: 0.0) + price
+                            }
+                        }
+                        
+                        tertiary.forEach { category ->
+                            if (!item.categories.contains(category)) { // Avoid double-counting
+                                result[category] = (result[category] ?: 0.0) + price
+                            }
+                        }
                     }
                 }
                 
-                // Final validation logs
-                if (result.isNotEmpty()) {
-                    Log.d("CalendarFix", "Final map contains ${result.size} dates with master records")
-                    result.forEach { (date, amount) ->
-                        Log.d("CalendarFix", "   $date = ₹$amount")
-                    }
-                } else {
-                    Log.d("CalendarFix", "Final map is EMPTY - no master records for month")
-                }
-                
-                Log.d("CalendarFix", "-------------- END CALENDAR DATA FETCH --------------")
+                // Log the final result for debugging
+                Log.d("MasterRecords", "Final category totals for $yearMonth: ${result.entries.joinToString { "${it.key}=${it.value}" }}")
             } catch (e: Exception) {
-                Log.e("CalendarFix", "Error getting master record totals", e)
+                Log.e("MasterRecords", "Error processing master records", e)
+                e.printStackTrace()
             }
             
-            return@withContext result
+            result
         }
     }
 
-    // Category management methods
+    /**
+     * Get all items for a specific date range directly
+     * This is used by the Monthly Report screen to show items when clicking on a month
+     */
+    suspend fun getItemsForMonthRange(startMillis: Long, endMillis: Long): List<TodoItem> {
+        return withContext(Dispatchers.IO) {
+            repository.getAllItemsForDateRange(startMillis, endMillis)
+        }
+    }
+
     suspend fun saveCategories(type: String, categories: List<ExpenseCategory>) {
         val sharedPreferences = getApplication<Application>().getSharedPreferences("categories_prefs", android.content.Context.MODE_PRIVATE)
-        val gson = com.google.gson.Gson()
+        val gson = Gson()
         val json = gson.toJson(categories)
         sharedPreferences.edit().putString("${type}_categories", json).apply()
-        // Update the corresponding StateFlow
         when (type) {
             "primary" -> _primaryCategories.value = categories
             "secondary" -> _secondaryCategories.value = categories
             "tertiary" -> _tertiaryCategories.value = categories
         }
     }
-    
+
     fun getSavedCategories(type: String): List<ExpenseCategory>? {
         val sharedPreferences = getApplication<Application>().getSharedPreferences("categories_prefs", android.content.Context.MODE_PRIVATE)
         val json = sharedPreferences.getString("${type}_categories", null) ?: return null
-        val gson = com.google.gson.Gson()
-        val typeToken = com.google.gson.reflect.TypeToken.getParameterized(List::class.java, ExpenseCategory::class.java).type
+        val gson = Gson()
+        val typeToken = TypeToken.getParameterized(List::class.java, ExpenseCategory::class.java).type
         val categories = gson.fromJson<List<ExpenseCategory>>(json, typeToken)
-        
-        // Create a map of all default icons for easy lookup
         val defaultCategories = when (type) {
             "primary" -> com.example.monday.ui.components.DefaultCategories.primaryCategories
             "secondary" -> com.example.monday.ui.components.DefaultCategories.secondaryCategories
             "tertiary" -> com.example.monday.ui.components.DefaultCategories.tertiaryCategories
             else -> emptyList()
         }
-        
         val iconMap = defaultCategories.associate { it.name to it.icon }
-        
-        // Restore missing icons
         return categories.map { category ->
             val defaultIcon = iconMap[category.name] ?: Icons.Default.MoreHoriz
             category.copy(icon = defaultIcon)
         }
     }
-    
+
     suspend fun saveCategoryVisibilitySetting(type: String, isVisible: Boolean) {
         val sharedPreferences = getApplication<Application>().getSharedPreferences("categories_prefs", android.content.Context.MODE_PRIVATE)
         sharedPreferences.edit().putBoolean("${type}_visibility", isVisible).apply()
     }
-    
+
     fun getCategoryVisibilitySetting(type: String): Boolean? {
         val sharedPreferences = getApplication<Application>().getSharedPreferences("categories_prefs", android.content.Context.MODE_PRIVATE)
         if (!sharedPreferences.contains("${type}_visibility")) return null
         return sharedPreferences.getBoolean("${type}_visibility", true)
     }
-    
-    // Methods to save and retrieve most recently selected categories
+
     fun saveRecentlySelectedCategory(categoryType: String, categoryName: String) {
         val sharedPreferences = getApplication<Application>().getSharedPreferences("categories_prefs", android.content.Context.MODE_PRIVATE)
         sharedPreferences.edit().putString("recent_${categoryType}", categoryName).apply()
     }
-    
+
     fun getRecentlySelectedCategory(categoryType: String): String? {
         val sharedPreferences = getApplication<Application>().getSharedPreferences("categories_prefs", android.content.Context.MODE_PRIVATE)
         return sharedPreferences.getString("recent_${categoryType}", null)
     }
 
-    /**
-     * Ensures there's at least one calculation record for the given date.
-     * If no record exists, creates an empty one.
-     */
     fun insertEmptyCalculationRecordIfNeeded(date: LocalDate) = viewModelScope.launch(Dispatchers.IO) {
         val startOfDayMillis = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfDayMillis = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
-        
-        // Check if any records exist for this date
         val existingRecords = repository.getAllCalculationRecordsForDateRangeDirect(
             startOfDayMillis, endOfDayMillis
         )
-        
-        // If no records exist, create an empty one
         if (existingRecords.isEmpty()) {
             val emptyRecord = CalculationRecord(
                 items = emptyList(),
@@ -1101,7 +993,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Add a method to get item by ID directly from the current state
     fun getItemById(id: Int): TodoItem {
         return _todoItems.value.find { it.id == id } ?: throw IllegalArgumentException("Item with ID $id not found")
     }
@@ -1110,44 +1001,28 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         imageUpdateMutex.withLock {
             Log.d("ImageDeletion", "Mutex locked for deleting $imageUrl")
             Log.d("ImageDeletion", "Starting image deletion for item ID ${item.id}, URL: $imageUrl")
-
-            // Get the latest version of the item from the database to prevent stale data issues
             val currentItem = repository.getItemById(item.id)
             if (currentItem == null) {
                 Log.e("ImageDeletion", "Item with ID ${item.id} not found in repository. Aborting deletion.")
                 return@withLock
             }
-
-            // Create a mutable copy of image URIs from the LATEST item state
             val updatedUris = currentItem.imageUris?.toMutableList() ?: mutableListOf()
             Log.d("ImageDeletion", "Original image URIs from repo: $updatedUris")
-
-            // Remove the specified URI
             val removed = updatedUris.remove(imageUrl)
             if (!removed) {
                 Log.w("ImageDeletion", "Image URL not found in item's list, might have been already deleted: $imageUrl")
             }
             Log.d("ImageDeletion", "Updated image URIs after removal: $updatedUris")
-
-            // Create a new TodoItem with updated URIs
             val updatedItem = currentItem.copy(imageUris = updatedUris)
             Log.d("ImageDeletion", "Updating item ID=${currentItem.id} with new URIs size: ${updatedUris.size}")
-
-            // Update the item in the repository
             repository.update(updatedItem)
-
-            // Also update the in-memory list for immediate UI feedback
             _todoItems.value = _todoItems.value.map {
                 if (it.id == currentItem.id) updatedItem else it
             }
-
-            // Delete the actual file only if it was successfully removed from the database record
             if (removed) {
                 try {
                     val uri = Uri.parse(imageUrl)
                     Log.d("ImageDeletion", "Parsed URI for file deletion: $uri")
-                    
-                    // Special handling based on URI scheme
                     when (uri.scheme) {
                         "content" -> {
                             val contentResolver = getApplication<Application>().contentResolver
@@ -1186,98 +1061,73 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     fun addImageToItem(item: TodoItem, imageUri: Uri) = viewModelScope.launch {
         Log.d("ImageDebug", "Starting addImageToItem for item ${item.id} with uri: $imageUri")
         try {
-            // First update the UI with the temporary URI
             val tempUris = item.imageUris.orEmpty() + imageUri.toString()
             val tempUpdatedItem = item.copy(imageUris = tempUris)
-            
-            // Update the item immediately with the temporary URI for instant feedback
-            _todoItems.value = _todoItems.value.map { 
-                if (it.id == item.id) tempUpdatedItem else it 
+            _todoItems.value = _todoItems.value.map {
+                if (it.id == item.id) tempUpdatedItem else it
             }
-            
-            // Then process the image in the background
             withContext(Dispatchers.IO) {
                 val internalUri = copyUriToInternalStorage(getApplication(), imageUri)
                 Log.d("ImageDebug", "After copyUriToInternalStorage, result: $internalUri")
-                
                 if (internalUri != null) {
-                    // Get the latest version of the item from the database to avoid conflicts
                     val currentItem = repository.getItemById(item.id)
                     val currentUris = currentItem?.imageUris.orEmpty()
                     Log.d("ImageDebug", "Current image URIs from database: $currentUris")
-                    
                     val updatedUris = currentUris + internalUri.toString()
                     Log.d("ImageDebug", "Updated image URIs: $updatedUris")
-                    
                     val updatedItem = currentItem?.copy(imageUris = updatedUris) ?: item.copy(imageUris = updatedUris)
                     Log.d("ImageDebug", "Updating item in repository with new URIs")
                     repository.update(updatedItem)
-                    
-                    // Update the in-memory list with the final URIs
                     withContext(Dispatchers.Main) {
-                        _todoItems.value = _todoItems.value.map { 
-                            if (it.id == item.id) updatedItem else it 
+                        _todoItems.value = _todoItems.value.map {
+                            if (it.id == item.id) updatedItem else it
                         }
                     }
                     Log.d("ImageDebug", "Item updated successfully")
                 } else {
                     Log.e("ImageDebug", "Failed to copy URI to internal storage")
-                    // Revert the temporary update if we failed
                     withContext(Dispatchers.Main) {
-                        _todoItems.value = _todoItems.value.map { 
-                            if (it.id == item.id) item else it 
+                        _todoItems.value = _todoItems.value.map {
+                            if (it.id == item.id) item else it
                         }
                     }
                 }
             }
         } catch (e: Exception) {
             Log.e("ImageDebug", "Error in addImageToItem", e)
-            // Revert the temporary update if we failed
-            _todoItems.value = _todoItems.value.map { 
-                if (it.id == item.id) item else it 
+            _todoItems.value = _todoItems.value.map {
+                if (it.id == item.id) item else it
             }
         }
     }
 
     suspend fun updateCategory(oldCategory: ExpenseCategory, newCategory: ExpenseCategory, type: String) {
-        // Store the action for potential undo
         _lastCategoryAction.value = CategoryAction.Edited(oldCategory, newCategory, type)
-        
-        // Continue with normal update process...
-        // 1. Update all TodoItems using the old category name
         withContext(Dispatchers.IO) {
             val allItems = repository.getAllItems()
             val itemsToUpdate = allItems.filter { it.categories?.contains(oldCategory.name) == true }
-            
             Log.d("CategoryUpdate", "Found ${itemsToUpdate.size} TodoItems with category '${oldCategory.name}' to update")
-
             for (item in itemsToUpdate) {
                 val newCategories = item.categories?.map { if (it == oldCategory.name) newCategory.name else it }
                 val updatedItem = item.copy(categories = newCategories)
                 repository.update(updatedItem)
                 Log.d("CategoryUpdate", "Updated TodoItem ID: ${item.id}")
             }
-            
-            // 2. Update all CalculationRecords that have RecordItems with this category
             val allRecords = repository.getAllCalculationRecordsForExport()
             var updatedRecordsCount = 0
-            
             for (record in allRecords) {
                 var recordNeedsUpdate = false
                 val updatedItems = record.items.map { recordItem ->
                     if (recordItem.categories?.contains(oldCategory.name) == true) {
-                        // Update the categories in this RecordItem
                         recordNeedsUpdate = true
-                        val newRecordCategories = recordItem.categories.map { 
-                            if (it == oldCategory.name) newCategory.name else it 
+                        val newRecordCategories = recordItem.categories.map {
+                            if (it == oldCategory.name) newCategory.name else it
                         }
                         recordItem.copy(categories = newRecordCategories)
                     } else {
                         recordItem
                     }
                 }
-                
-                // If any items in this record were updated, save the record
                 if (recordNeedsUpdate) {
                     val updatedRecord = record.copy(items = updatedItems)
                     repository.updateCalculationRecord(updatedRecord)
@@ -1285,18 +1135,14 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                     Log.d("CategoryUpdate", "Updated CalculationRecord ID: ${record.id}")
                 }
             }
-            
             Log.d("CategoryUpdate", "Updated a total of $updatedRecordsCount calculation records")
         }
-
-        // 3. Update the category list in SharedPreferences
         val currentCategories = when (type) {
             "primary" -> _primaryCategories.value.toMutableList()
             "secondary" -> _secondaryCategories.value.toMutableList()
             "tertiary" -> _tertiaryCategories.value.toMutableList()
             else -> mutableListOf()
         }
-
         val index = currentCategories.indexOf(oldCategory)
         if (index != -1) {
             currentCategories[index] = newCategory
@@ -1306,24 +1152,18 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun deleteCategory(categoryToDelete: ExpenseCategory, type: String) {
-        // 1. Remove the category from all TodoItems that use it
+        val affectedItems = mutableListOf<TodoItem>()
+        val affectedRecords = mutableListOf<CalculationRecord>()
+
         withContext(Dispatchers.IO) {
             val allItems = repository.getAllItems()
             val itemsToUpdate = allItems.filter { it.categories?.contains(categoryToDelete.name) == true }
-            
             Log.d("CategoryDelete", "Found ${itemsToUpdate.size} TodoItems with category '${categoryToDelete.name}' to update")
-            
+
             for (item in itemsToUpdate) {
-                // Remove this category from the item's category list
+                affectedItems.add(item)
                 val updatedCategories = item.categories?.filter { it != categoryToDelete.name }
-                
-                // Recalculate category type flags
-                val (hasPrimary, hasSecondary, hasTertiary) = if (updatedCategories.isNullOrEmpty()) {
-                    Triple(false, false, false)
-                } else {
-                    determineCategoryTypes(updatedCategories)
-                }
-                
+                val (hasPrimary, hasSecondary, hasTertiary) = determineCategoryTypes(updatedCategories)
                 val updatedItem = item.copy(
                     categories = updatedCategories,
                     hasPrimaryCategory = hasPrimary,
@@ -1333,16 +1173,16 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 repository.update(updatedItem)
                 Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from TodoItem ID: ${item.id}")
             }
-            
-            // 2. Remove the category from all CalculationRecords that use it
+
             val allRecords = repository.getAllCalculationRecordsForExport()
             var updatedRecordsCount = 0
-            
             for (record in allRecords) {
                 var recordNeedsUpdate = false
-                val updatedItems = record.items.map { recordItem ->
+                val updatedRecordItems = record.items.map { recordItem ->
                     if (recordItem.categories?.contains(categoryToDelete.name) == true) {
-                        // Remove this category from the RecordItem
+                        if (!recordNeedsUpdate) {
+                            affectedRecords.add(record)
+                        }
                         recordNeedsUpdate = true
                         val updatedCategories = recordItem.categories.filter { it != categoryToDelete.name }
                         recordItem.copy(categories = if (updatedCategories.isEmpty()) null else updatedCategories)
@@ -1350,20 +1190,16 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                         recordItem
                     }
                 }
-                
-                // If any items in this record were updated, save the record
                 if (recordNeedsUpdate) {
-                    val updatedRecord = record.copy(items = updatedItems)
+                    val updatedRecord = record.copy(items = updatedRecordItems)
                     repository.updateCalculationRecord(updatedRecord)
                     updatedRecordsCount++
                     Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from CalculationRecord ID: ${record.id}")
                 }
             }
-            
             Log.d("CategoryDelete", "Updated a total of $updatedRecordsCount calculation records")
         }
 
-        // 3. Remove the category from the SharedPreferences list
         val currentCategories = when (type) {
             "primary" -> _primaryCategories.value.toMutableList()
             "secondary" -> _secondaryCategories.value.toMutableList()
@@ -1373,18 +1209,15 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         if (currentCategories.remove(categoryToDelete)) {
             saveCategories(type, currentCategories)
             Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from preferences")
-            
-            // Store this action for potential undo
             _lastCategoryAction.value = CategoryAction.Deleted(
                 category = categoryToDelete,
                 type = type,
-                affectedItems = emptyList(),
-                affectedRecords = emptyList()
+                affectedItems = affectedItems,
+                affectedRecords = affectedRecords
             )
         }
     }
-    
-    // Method to update the order of categories (move up/down)
+
     suspend fun moveCategory(category: ExpenseCategory, type: String, newPosition: Int) {
         val currentCategories = when (type) {
             "primary" -> _primaryCategories.value.toMutableList()
@@ -1392,31 +1225,24 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             "tertiary" -> _tertiaryCategories.value.toMutableList()
             else -> return
         }
-        
         val currentPosition = currentCategories.indexOf(category)
-        if (currentPosition == -1 || currentPosition == newPosition || 
-            newPosition < 0 || newPosition >= currentCategories.size) {
-            return  // Invalid operation
+        if (currentPosition == -1 || currentPosition == newPosition ||
+            newPosition < 0 || newPosition >= currentCategories.size
+        ) {
+            return
         }
-        
-        // Store the current position for undo
         _lastCategoryAction.value = CategoryAction.Moved(
             category = category,
             type = type,
             oldPosition = currentPosition,
             newPosition = newPosition
         )
-        
-        // Perform the move
         currentCategories.removeAt(currentPosition)
         currentCategories.add(newPosition, category)
-        
-        // Save the reordered list
         saveCategories(type, currentCategories)
         Log.d("CategoryMove", "Moved category '${category.name}' from position $currentPosition to $newPosition")
     }
 
-    // Add method to record category additions
     suspend fun addCategory(category: ExpenseCategory, type: String) {
         val currentCategories = when (type) {
             "primary" -> _primaryCategories.value.toMutableList()
@@ -1424,29 +1250,21 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             "tertiary" -> _tertiaryCategories.value.toMutableList()
             else -> mutableListOf()
         }
-        
         currentCategories.add(category)
         saveCategories(type, currentCategories)
-        
-        // Store the action for potential undo
         _lastCategoryAction.value = CategoryAction.Added(category, type)
-        
         Log.d("CategoryAdd", "Added category '${category.name}' to $type categories")
     }
 
-    // Method to check if there are undoable items for the current date
     fun hasUndoableItemsForCurrentDate(): Boolean {
         val currentDate = _selectedDate.value
         return (_undoableDeletedItemsByDate.value[currentDate]?.isNotEmpty() == true)
     }
 
-    // Method to undo the last category action
     suspend fun undoLastCategoryAction() {
         val action = _lastCategoryAction.value ?: return
-        
         when (action) {
             is CategoryAction.Added -> {
-                // Reverse the add by removing the category
                 val currentCategories = when (action.type) {
                     "primary" -> _primaryCategories.value.toMutableList()
                     "secondary" -> _secondaryCategories.value.toMutableList()
@@ -1458,12 +1276,10 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 Log.d("CategoryUndo", "Undid addition of category '${action.category.name}'")
             }
             is CategoryAction.Edited -> {
-                // Reverse the edit by restoring the old version
                 updateCategory(action.newCategory, action.oldCategory, action.type)
                 Log.d("CategoryUndo", "Undid edit of category '${action.newCategory.name}' back to '${action.oldCategory.name}'")
             }
             is CategoryAction.Deleted -> {
-                // Restore the category to preferences
                 val currentCategories = when (action.type) {
                     "primary" -> _primaryCategories.value.toMutableList()
                     "secondary" -> _secondaryCategories.value.toMutableList()
@@ -1472,8 +1288,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 currentCategories.add(action.category)
                 saveCategories(action.type, currentCategories)
-                
-                // Restore the category to all affected items
                 withContext(Dispatchers.IO) {
                     for (item in action.affectedItems) {
                         val updatedCategories = (item.categories ?: emptyList()) + action.category.name
@@ -1486,8 +1300,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                         )
                         repository.update(updatedItem)
                     }
-                    
-                    // Restore the category to all affected records
                     for (record in action.affectedRecords) {
                         var recordNeedsUpdate = false
                         val updatedItems = record.items.map { recordItem ->
@@ -1499,25 +1311,21 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                                 recordItem.copy(categories = listOf(action.category.name))
                             }
                         }
-                        
                         if (recordNeedsUpdate) {
                             val updatedRecord = record.copy(items = updatedItems)
                             repository.updateCalculationRecord(updatedRecord)
                         }
                     }
                 }
-                
                 Log.d("CategoryUndo", "Undid deletion of category '${action.category.name}'")
             }
             is CategoryAction.Moved -> {
-                // Reverse the move operation
                 val currentCategories = when (action.type) {
                     "primary" -> _primaryCategories.value.toMutableList()
                     "secondary" -> _secondaryCategories.value.toMutableList()
                     "tertiary" -> _tertiaryCategories.value.toMutableList()
                     else -> mutableListOf()
                 }
-                
                 if (currentCategories.remove(action.category)) {
                     val targetPosition = if (action.oldPosition < currentCategories.size)
                         action.oldPosition else currentCategories.size
@@ -1527,44 +1335,27 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        
-        // Clear the last action after undoing
         _lastCategoryAction.value = null
     }
 
-    // Enhanced delete category method with options
     suspend fun deleteCategoryWithOptions(
-        categoryToDelete: ExpenseCategory, 
-        type: String, 
+        categoryToDelete: ExpenseCategory,
+        type: String,
         removeFromExpenses: Boolean
     ) {
-        // Store affected items and records for undo functionality
-        val affectedItems: MutableList<TodoItem> = mutableListOf()
-        val affectedRecords: MutableList<CalculationRecord> = mutableListOf()
-        
+        val affectedItems = mutableListOf<TodoItem>()
+        val affectedRecords = mutableListOf<CalculationRecord>()
+
         if (removeFromExpenses) {
-            // Remove from all expenses (current behavior)
             withContext(Dispatchers.IO) {
-                // 1. Find and update TodoItems
                 val allItems = repository.getAllItems()
                 val itemsToUpdate = allItems.filter { it.categories?.contains(categoryToDelete.name) == true }
-                
                 Log.d("CategoryDelete", "Found ${itemsToUpdate.size} TodoItems with category '${categoryToDelete.name}' to update")
-                
+
                 for (item in itemsToUpdate) {
-                    // Save the original item for undo
                     affectedItems.add(item)
-                    
-                    // Remove this category from the item's category list
                     val updatedCategories = item.categories?.filter { it != categoryToDelete.name }
-                    
-                    // Recalculate category type flags
-                    val (hasPrimary, hasSecondary, hasTertiary) = if (updatedCategories.isNullOrEmpty()) {
-                        Triple(false, false, false)
-                    } else {
-                        determineCategoryTypes(updatedCategories)
-                    }
-                    
+                    val (hasPrimary, hasSecondary, hasTertiary) = determineCategoryTypes(updatedCategories)
                     val updatedItem = item.copy(
                         categories = updatedCategories,
                         hasPrimaryCategory = hasPrimary,
@@ -1574,21 +1365,16 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                     repository.update(updatedItem)
                     Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from TodoItem ID: ${item.id}")
                 }
-                
-                // 2. Find and update CalculationRecords
+
                 val allRecords = repository.getAllCalculationRecordsForExport()
                 var updatedRecordsCount = 0
-                
                 for (record in allRecords) {
                     var recordNeedsUpdate = false
                     val updatedItems = record.items.map { recordItem ->
                         if (recordItem.categories?.contains(categoryToDelete.name) == true) {
-                            // Mark record as affected for undo
                             if (!recordNeedsUpdate) {
                                 affectedRecords.add(record)
                             }
-                            
-                            // Remove this category from the RecordItem
                             recordNeedsUpdate = true
                             val updatedCategories = recordItem.categories.filter { it != categoryToDelete.name }
                             recordItem.copy(categories = if (updatedCategories.isEmpty()) null else updatedCategories)
@@ -1596,8 +1382,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                             recordItem
                         }
                     }
-                    
-                    // If any items in this record were updated, save the record
                     if (recordNeedsUpdate) {
                         val updatedRecord = record.copy(items = updatedItems)
                         repository.updateCalculationRecord(updatedRecord)
@@ -1605,12 +1389,10 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
                         Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from CalculationRecord ID: ${record.id}")
                     }
                 }
-                
                 Log.d("CategoryDelete", "Updated a total of $updatedRecordsCount calculation records")
             }
         }
 
-        // 3. Remove the category from the SharedPreferences list
         val currentCategories = when (type) {
             "primary" -> _primaryCategories.value.toMutableList()
             "secondary" -> _secondaryCategories.value.toMutableList()
@@ -1620,8 +1402,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         if (currentCategories.remove(categoryToDelete)) {
             saveCategories(type, currentCategories)
             Log.d("CategoryDelete", "Removed category '${categoryToDelete.name}' from preferences")
-            
-            // Store this action for potential undo
             _lastCategoryAction.value = CategoryAction.Deleted(
                 category = categoryToDelete,
                 type = type,
@@ -1631,21 +1411,123 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Get undoable deleted items by date for export
     fun getUndoableDeletedItemsByDate(): Map<LocalDate, List<TodoItem>> {
         return _undoableDeletedItemsByDate.value
     }
 
-    // Restore undoable deleted items by date from import
-    fun restoreUndoableDeletedItemsByDate(undoableItemsByDate: Map<LocalDate, List<TodoItem>>) {
+    fun restoreUndoableDeletedItemsByDate(undoableItemsByDate: Map<LocalDate, List<TodoItem>>) = viewModelScope.launch(Dispatchers.IO) {
         _undoableDeletedItemsByDate.value = undoableItemsByDate
     }
 
-    // Set last category action (for import/restore)
-    fun setLastCategoryAction(action: CategoryAction) {
+    fun setLastCategoryAction(action: CategoryAction) = viewModelScope.launch(Dispatchers.IO) {
         _lastCategoryAction.value = action
+    }
+
+    fun updateItems(items: List<TodoItem>) = viewModelScope.launch {
+        repository.updateItems(items)
+    }
+
+    /**
+     * Get the actual master records for a specific month
+     * This is used by the Monthly Report screen to show master record details when clicking on a month
+     */
+    suspend fun getMasterRecordsForMonth(startMillis: Long, endMillis: Long): List<CalculationRecord> {
+        return withContext(Dispatchers.IO) {
+            repository.getMasterRecordsForDateRange(startMillis, endMillis)
+        }
+    }
+
+    /**
+     * Provides all expenses from master-saved records across all dates.
+     * Flattens each CalculationRecord.items into display-ready entries with the record's date.
+     */
+    fun getAllMasterSavedExpenseDisplayItems(): Flow<List<ExpenseDisplayItem>> {
+        return repository.allCalculationRecords
+            .map { records ->
+                records.asSequence()
+                    .filter { it.isMasterSave }
+                    .flatMap { record ->
+                        val recordDate = record.recordDate.toLocalDate()
+                        record.items.asSequence().map { item ->
+                            val priceAsDouble = item.price.toDoubleOrNull() ?: 0.0
+                            ExpenseDisplayItem(
+                                id = item.sourceItemId ?: 0,
+                                date = recordDate,
+                                description = item.description,
+                                quantity = item.quantity,
+                                price = priceAsDouble
+                            )
+                        }
+                    }
+                    .sortedByDescending { it.date }
+                    .toList()
+            }
+    }
+
+    /**
+     * Categories that exist only in master-saved records and are not present in current TodoItems.
+     */
+    fun getMasterOnlyCategories(): Flow<Set<String>> {
+        // Collect master categories keeping original casing but deduping by lowercase
+        val masterFlow = repository.allCalculationRecords.map { records ->
+            val seen = mutableSetOf<String>()
+            records.asSequence()
+                .filter { it.isMasterSave }
+                .flatMap { it.items.asSequence() }
+                .flatMap { (it.categories ?: emptyList()).asSequence() }
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .filter { seen.add(it.lowercase()) }
+                .toSet()
+        }
+
+        // Collect current categories from both the structured field and parsed text, normalized to lowercase
+        val currentFlow = todoItems.map { items ->
+            val fromField = items.asSequence().flatMap { (it.categories ?: emptyList()).asSequence() }
+            val fromText = items.asSequence().flatMap { parseCategoryInfo(it.text).second.asSequence() }
+            (fromField + fromText)
+                .map { it.trim().lowercase() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+        }
+
+        // Return display-cased master categories whose lowercase form is not used in current items
+        return masterFlow.combine(currentFlow) { masterDisplay, currentLower ->
+            masterDisplay.filter { it.lowercase() !in currentLower }.toSet()
+        }
+    }
+
+    /**
+     * All expenses from master-saved records for a specific category, with record date.
+     */
+    fun getMasterExpensesByCategory(category: String): Flow<List<ExpenseDisplayItem>> {
+        val normalized = category.trim()
+        return repository.allCalculationRecords.map { records ->
+            records.asSequence()
+                .filter { it.isMasterSave }
+                .flatMap { record ->
+                    val date = record.recordDate.toLocalDate()
+                    record.items.asSequence()
+                        .filter { it.categories?.any { c -> c.equals(normalized, ignoreCase = true) } == true }
+                        .map { item ->
+                            val priceAsDouble = item.price.toDoubleOrNull() ?: 0.0
+                            ExpenseDisplayItem(
+                                id = item.sourceItemId ?: 0,
+                                date = date,
+                                description = item.description,
+                                quantity = item.quantity,
+                                price = priceAsDouble
+                            )
+                        }
+                }
+                .sortedWith(compareByDescending<ExpenseDisplayItem> { it.date }.thenBy { it.description })
+                .toList()
+        }
     }
 }
 
 private val LocalDate.toEpochMilli: Long
     get() = this.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+private val Long.toLocalDate: LocalDate
+    get() = Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()

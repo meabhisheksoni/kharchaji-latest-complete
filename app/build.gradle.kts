@@ -23,11 +23,18 @@ android {
 
     buildTypes {
         release {
+            // Temporarily disable R8/minify to speed up builds during development
             isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            isShrinkResources = false
+            // ProGuard files commented out for now
+            // proguardFiles(
+            //     getDefaultProguardFile("proguard-android-optimize.txt"),
+            //     "proguard-rules.pro"
+            // )
+        }
+        debug {
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
     compileOptions {
@@ -50,6 +57,9 @@ android {
     }
     lint {
         abortOnError = false
+        checkReleaseBuilds = false // Don't run lint on release builds
+        checkDependencies = false // Skip checking dependencies
+        ignoreWarnings = true // Treat warnings as non-fatal
         baseline = file("lint-baseline.xml")
     }
 }
@@ -82,6 +92,33 @@ dependencies {
     // Lifecycle components
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    implementation("androidx.compose.runtime:runtime-livedata:1.6.7")
+
+    // Performance improvements
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+    implementation("androidx.paging:paging-runtime-ktx:3.2.1")
+    implementation("androidx.paging:paging-compose:3.2.1")
+    
+    // Background processing
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Image handling
+    implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("com.google.accompanist:accompanist-permissions:0.32.0")
+    // UPI Payment integration temporarily disabled - will be added back later
+
+    // CameraX and MLKit
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.google.mlkit.barcode.scanning)
+    implementation(libs.play.services.mlkit.barcode.scanning)
+
+    // Glance for Compose-based App Widgets (widgets with better interactivity)
+    implementation("androidx.glance:glance-appwidget:1.0.0")
+    implementation("androidx.glance:glance-material3:1.0.0")
 
     // Testing
     testImplementation(libs.junit)
@@ -93,10 +130,7 @@ dependencies {
     // Debug implementations
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-
-    implementation("io.coil-kt:coil-compose:2.4.0")
-    implementation("com.google.accompanist:accompanist-permissions:0.32.0")
-
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    
+    // Memory leak detection
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.10")
 }

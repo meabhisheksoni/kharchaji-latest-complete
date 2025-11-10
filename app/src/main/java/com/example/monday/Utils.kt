@@ -6,6 +6,27 @@ import java.util.Locale // For String.format Locale
 import com.example.monday.TodoItem
 import com.example.monday.RecordItem
 
+enum class CategoryType {
+    PRIMARY, SECONDARY, TERTIARY
+}
+
+fun getCategoryType(category: String): CategoryType {
+    val lowerCategory = category.lowercase(Locale.getDefault())
+    val primaryKeywords = setOf("abhishek", "kharcha", "papa", "priya", "mmy")
+    val secondaryKeywords = setOf("education", "home", "travel", "wedding")
+    val tertiaryKeywords = setOf(
+        "grocery", "shopping", "food", "bills", "entertainment", 
+        "eating", "hotel", "restaurant", "give", "can be", "medicine"
+    )
+
+    return when {
+        primaryKeywords.any { it == lowerCategory || lowerCategory.contains(it) } -> CategoryType.PRIMARY
+        secondaryKeywords.any { it == lowerCategory || lowerCategory.contains(it) } -> CategoryType.SECONDARY
+        tertiaryKeywords.any { it == lowerCategory || lowerCategory.contains(it) } -> CategoryType.TERTIARY
+        else -> CategoryType.TERTIARY // Default to tertiary for unknown categories
+    }
+}
+
 fun parsePrice(text: String): Double {
     // First, remove any category metadata
     val cleanedText = text.split("|CATS:").first()
@@ -116,4 +137,19 @@ fun java.time.LocalDate.toEpochMilli(): Long {
 
 fun java.time.LocalDate.formatForDisplay(pattern: String = "MMM dd, yyyy"): String {
     return this.format(java.time.format.DateTimeFormatter.ofPattern(pattern))
+}
+
+fun intelligentlyCategorize(categories: Set<String>): Triple<List<String>, List<String>, List<String>> {
+    val primary = mutableListOf<String>()
+    val secondary = mutableListOf<String>()
+    val tertiary = mutableListOf<String>()
+
+    categories.forEach { category ->
+        when (getCategoryType(category)) {
+            CategoryType.PRIMARY -> primary.add(category)
+            CategoryType.SECONDARY -> secondary.add(category)
+            CategoryType.TERTIARY -> tertiary.add(category)
+        }
+    }
+    return Triple(primary.sorted(), secondary.sorted(), tertiary.sorted())
 }

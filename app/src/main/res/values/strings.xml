@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">kharchaji</string>
+    <string name="app_widget_description">Add expenses quickly from your home screen</string>
+    <string name="glance_widget_description">Interactive expense widget - add expenses directly from home screen</string>
 </resources>

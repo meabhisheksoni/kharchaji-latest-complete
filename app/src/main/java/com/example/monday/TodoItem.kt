@@ -1,10 +1,15 @@
 package com.example.monday
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverters
 
-@Entity(tableName = "todo_table")
+@Entity(tableName = "todo_table", indices = [
+    Index(value = ["isDone"]), 
+    Index(value = ["timestamp"]),
+    Index(value = ["timestamp", "isDone"])
+])
 @TypeConverters(CalculationRecordConverters::class)
 data class TodoItem(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
