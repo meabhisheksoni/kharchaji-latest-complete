@@ -51,14 +51,19 @@ class ExpenseGlanceWidget : GlanceAppWidget() {
         val qty = prefs[QTY_KEY] ?: ""
         val unit = prefs[UNIT_KEY] ?: ""
 
-        Column(
+        Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .padding(16.dp)
                 .background(androidx.glance.unit.ColorProvider(androidx.compose.ui.graphics.Color.White)),
-            verticalAlignment = Alignment.Top,
-            horizontalAlignment = Alignment.Start
+            contentAlignment = Alignment.TopStart
         ) {
+            Column(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalAlignment = Alignment.Start
+            ) {
             // Item Name Section
             Text(
                 text = "Item name",
@@ -236,6 +241,7 @@ class ExpenseGlanceWidget : GlanceAppWidget() {
                     UnitButton(unitValue, unit == unitValue)
                     if (index < 2) Spacer(modifier = GlanceModifier.width(4.dp))
                 }
+            }
             }
         }
     }

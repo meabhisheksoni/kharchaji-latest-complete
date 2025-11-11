@@ -17,6 +17,13 @@
     
     <!-- Overlay permission for floating button -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    
+    <!-- Foreground service permission for persistent overlay -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    
+    <!-- Boot permission to auto-start overlay -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".KharchajiApplication"
@@ -118,13 +125,28 @@
         <!-- Overlay Service -->
         <service
             android:name=".overlay.OverlayService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Quick expense entry overlay button" />
+        </service>
         
         <!-- Overlay Permission Activity -->
         <activity
             android:name=".overlay.OverlayPermissionActivity"
             android:exported="false"
             android:theme="@style/Theme.Kharchaji" />
+        
+        <!-- Boot Receiver for auto-starting overlay -->
+        <receiver
+            android:name=".overlay.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

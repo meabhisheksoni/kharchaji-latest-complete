@@ -440,10 +440,34 @@ fun DedicatedExpenseListScreen(
                                         )
                                         
                                         // Use our simplified duplicate detection
-                                        todoViewModel.insertCalculationRecordIfNotDuplicate(newRecord)
+                                        val wasNewRecordCreated = todoViewModel.insertCalculationRecordIfNotDuplicate(newRecord)
+                                        val dateStr = selectedDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))
+                                        
+                                        // Show appropriate message based on whether a new record was created
+                                        withContext(Dispatchers.Main) {
+                                            if (wasNewRecordCreated) {
+                                                val toast = Toast.makeText(context, "New record saved for $dateStr", Toast.LENGTH_SHORT)
+                                                toast.show()
+                                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toast.cancel() }, 500)
+                                            } else {
+                                                val toast = Toast.makeText(context, "Identical expenses already saved for $dateStr", Toast.LENGTH_LONG)
+                                                toast.show()
+                                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toast.cancel() }, 500)
+                                            }
+                                        }
                                     } catch (e: Exception) {
                                         Log.e("SaveRecord", "Error saving record", e)
+                                        withContext(Dispatchers.Main) {
+                                            val toast = Toast.makeText(context, "Error saving record: ${e.message}", Toast.LENGTH_LONG)
+                                            toast.show()
+                                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toast.cancel() }, 500)
+                                        }
                                     }
+                                }
+                            } else {
+                                Toast.makeText(context, "No items to save as record", Toast.LENGTH_SHORT).apply {
+                                    show()
+                                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ cancel() }, 500)
                                 }
                             }
                         }) {
@@ -466,10 +490,47 @@ fun DedicatedExpenseListScreen(
                                 if (itemsForSelectedDate.isNotEmpty()) {
                                     scope.launch {
                                         try {
-                                            todoViewModel.saveToMasterRecord(selectedDate, itemsForSelectedDate)
+                                            val dateStr = selectedDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))
+                                            val result = todoViewModel.saveToMasterRecord(selectedDate, itemsForSelectedDate)
+                                            val regularCreated = result.first
+                                            val masterCreatedOrUpdated = result.second
+                                            
+                                            withContext(Dispatchers.Main) {
+                                                val message = when {
+                                                    // Both master and regular records were created
+                                                    regularCreated && masterCreatedOrUpdated -> {
+                                                        "Created master record and regular record for $dateStr"
+                                                    }
+                                                    // Only master record was created/updated, regular record already existed
+                                                    !regularCreated && masterCreatedOrUpdated -> {
+                                                        "Updated master record for $dateStr. Regular record already exists."
+                                                    }
+                                                    // Nothing was created (both already existed and no changes to master)
+                                                    !regularCreated && !masterCreatedOrUpdated -> {
+                                                        "Identical expenses already saved for $dateStr"
+                                                    }
+                                                    // Only regular was created (unlikely since master is always created/updated)
+                                                    else -> {
+                                                        "Saved to master record for $dateStr"
+                                                    }
+                                                }
+                                                val toast = Toast.makeText(context, message, Toast.LENGTH_SHORT)
+                                                toast.show()
+                                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toast.cancel() }, 500)
+                                            }
                                         } catch (e: Exception) {
                                             Log.e("MasterSave", "Error saving to master record", e)
+                                            withContext(Dispatchers.Main) {
+                                                val toast = Toast.makeText(context, "Error saving to master record: ${e.message}", Toast.LENGTH_LONG)
+                                                toast.show()
+                                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toast.cancel() }, 500)
+                                            }
                                         }
+                                    }
+                                } else {
+                                    Toast.makeText(context, "No items to save to master record", Toast.LENGTH_SHORT).apply {
+                                        show()
+                                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ cancel() }, 500)
                                     }
                                 }
                             },

@@ -5,7 +5,9 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -42,14 +44,19 @@ class WidgetInputActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Make dialog appear at top with keyboard - use ADJUST_PAN to prevent shifting
+        // Configure window BEFORE setting content to avoid animation
+        window.setGravity(android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL)
+        window.attributes = window.attributes.apply {
+            y = (5 * resources.displayMetrics.density).toInt() // 5dp from top
+            verticalMargin = 0f
+            horizontalMargin = 0f
+        }
+        
+        // Make keyboard appear without shifting dialog
         window.setSoftInputMode(
-            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN or
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or
             android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
         )
-        
-        // Set window to appear at top
-        window.setGravity(android.view.Gravity.TOP)
         
         val initialField = intent.getStringExtra("field") ?: "item_name"
         currentStep = initialField
@@ -60,9 +67,23 @@ class WidgetInputActivity : ComponentActivity() {
             KharchajiTheme {
                 ChainedInputDialog(
                     currentStep = currentStep,
-                    onDismiss = { 
-                        Log.d(TAG, "Dialog dismissed")
+                    onDismiss = { step, value ->
+                        Log.d(TAG, "Dialog dismissed at step: $step with value: $value")
+                        // Save price if user dismisses on price field
+                        if (step == "price" && value.isNotBlank()) {
+                            lifecycleScope.launch {
+                                savePriceAsync(value)
+                            }
+                        }
                         finish() 
+                    },
+                    onCustomQuantitySave = { qty, unit ->
+                        Log.d(TAG, "Custom quantity saved: $qty $unit")
+                        lifecycleScope.launch {
+                            saveQuantityAsync(qty, unit)
+                            // Move to item name
+                            currentStep = "item_name"
+                        }
                     },
                     onItemNameSave = { value ->
                         Log.d(TAG, "Item name saved: $value")
@@ -261,7 +282,12 @@ class WidgetInputActivity : ComponentActivity() {
                 ExpenseGlanceWidget().update(context, glanceId)
                 
                 withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(this@WidgetInputActivity, "Expense saved!", android.widget.Toast.LENGTH_SHORT).show()
+                    // Show very brief toast (500ms)
+                    val toast = android.widget.Toast.makeText(this@WidgetInputActivity, "Expense saved!", android.widget.Toast.LENGTH_SHORT)
+                    toast.show()
+                    // Cancel after 500ms
+                    kotlinx.coroutines.delay(500)
+                    toast.cancel()
                 }
                 
             } catch (e: Exception) {
@@ -275,7 +301,8 @@ class WidgetInputActivity : ComponentActivity() {
 @Composable
 fun ChainedInputDialog(
     currentStep: String,
-    onDismiss: () -> Unit,
+    onDismiss: (String, String) -> Unit, // Pass currentStep and value
+    onCustomQuantitySave: (String, String) -> Unit,
     onItemNameSave: (String) -> Unit,
     onPriceSave: (String, Boolean) -> Unit,
     onQuantitySave: (String, String) -> Unit
@@ -286,6 +313,7 @@ fun ChainedInputDialog(
     val focusRequester = remember { FocusRequester() }
 
     val (label, keyboardType, capitalization) = when (currentStep) {
+        "custom_quantity" -> Triple("Quantity", KeyboardType.Decimal, KeyboardCapitalization.None)
         "item_name" -> Triple("Item Name", KeyboardType.Text, KeyboardCapitalization.Sentences)
         "price" -> Triple("Price", KeyboardType.Decimal, KeyboardCapitalization.None)
         "quantity" -> Triple("Quantity (Optional)", KeyboardType.Decimal, KeyboardCapitalization.None)
@@ -305,31 +333,35 @@ fun ChainedInputDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { onDismiss(currentStep, value) },
         title = { Text("Enter $label") },
         text = {
             when (currentStep) {
                 "quantity" -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        // Preset quantity buttons
-                        Text("Select Quantity", style = MaterialTheme.typography.titleSmall)
+                        // Preset quantity buttons - Horizontal Scrollable
+                        Text("Quick Select", style = MaterialTheme.typography.titleSmall)
                         Spacer(modifier = Modifier.height(8.dp))
+                        
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            listOf("250g", "500g", "1kg", "1.5kg", "2kg").forEach { qty ->
+                            listOf("250g", "500g", "1kg", "1.5kg", "2kg", "3kg", "5kg").forEach { qty ->
                                 FilterChip(
                                     selected = selectedQty == qty,
                                     onClick = { 
                                         if (selectedQty == qty) {
-                                            // Deselect - clear both quantity and unit
+                                            // Deselect - clear preset selection
                                             selectedQty = ""
                                             selectedUnit = ""
                                         } else {
-                                            // Select - set quantity and unit
+                                            // Select preset - clear custom input and set unit
                                             selectedQty = qty
                                             selectedUnit = "g"
+                                            value = "" // Clear custom input
                                         }
                                     },
                                     label = { Text(qty, style = MaterialTheme.typography.bodySmall) },
@@ -338,25 +370,87 @@ fun ChainedInputDialog(
                             }
                         }
                         
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Text("OR", style = MaterialTheme.typography.labelMedium, 
+                             modifier = Modifier.padding(vertical = 4.dp))
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
                         
                         // Custom quantity
+                        Text("Custom Quantity", style = MaterialTheme.typography.titleSmall)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
                         OutlinedTextField(
                             value = value,
                             onValueChange = { 
                                 value = it
-                                selectedQty = ""
+                                // Clear preset selection when typing custom
+                                if (it.isNotEmpty()) {
+                                    selectedQty = ""
+                                }
                             },
-                            label = { Text("Custom Quantity") },
+                            label = { Text("Enter amount") },
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Decimal
                             ),
                             modifier = Modifier.fillMaxWidth()
                         )
                         
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Unit buttons - Only for custom quantity
+                        Text("Select Unit", style = MaterialTheme.typography.titleSmall)
                         Spacer(modifier = Modifier.height(8.dp))
                         
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf("kg", "g", "items").forEach { unit ->
+                                FilterChip(
+                                    selected = selectedUnit == unit && selectedQty.isEmpty(),
+                                    onClick = { 
+                                        // Only allow unit selection if using custom quantity
+                                        if (selectedQty.isEmpty()) {
+                                            selectedUnit = if (selectedUnit == unit) "" else unit
+                                        }
+                                    },
+                                    label = { Text(unit) },
+                                    enabled = selectedQty.isEmpty() // Disable if preset is selected
+                                )
+                            }
+                        }
+                    }
+                }
+                "custom_quantity" -> {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { value = it },
+                            label = { Text("Enter quantity") },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    if (value.isNotBlank() && selectedUnit.isNotBlank()) {
+                                        onCustomQuantitySave(value, selectedUnit)
+                                    }
+                                }
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
                         // Unit buttons
+                        Text("Select Unit", style = MaterialTheme.typography.titleSmall)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -365,7 +459,6 @@ fun ChainedInputDialog(
                                 FilterChip(
                                     selected = selectedUnit == unit,
                                     onClick = { 
-                                        // Toggle unit selection
                                         selectedUnit = if (selectedUnit == unit) "" else unit
                                     },
                                     label = { Text(unit) }
@@ -403,6 +496,18 @@ fun ChainedInputDialog(
         },
         confirmButton = {
             when (currentStep) {
+                "custom_quantity" -> {
+                    Button(
+                        onClick = {
+                            if (value.isNotBlank() && selectedUnit.isNotBlank()) {
+                                onCustomQuantitySave(value, selectedUnit)
+                            }
+                        },
+                        enabled = value.isNotBlank() && selectedUnit.isNotBlank()
+                    ) {
+                        Text("Next")
+                    }
+                }
                 "price" -> {
                     // Green arrow button for quantity selection
                     IconButton(
@@ -433,12 +538,23 @@ fun ChainedInputDialog(
                 "quantity" -> {
                     Button(
                         onClick = {
-                            val finalQty = if (selectedQty.isNotBlank()) {
-                                selectedQty.replace("kg", "").replace("g", "")
+                            val (finalQty, finalUnit) = if (selectedQty.isNotBlank()) {
+                                // Parse preset quantity (e.g., "1kg", "500g")
+                                when {
+                                    selectedQty.endsWith("kg") -> {
+                                        val qty = selectedQty.replace("kg", "")
+                                        val qtyInGrams = (qty.toDoubleOrNull() ?: 0.0) * 1000
+                                        qtyInGrams.toInt().toString() to "g"
+                                    }
+                                    selectedQty.endsWith("g") -> {
+                                        selectedQty.replace("g", "") to "g"
+                                    }
+                                    else -> selectedQty to "g"
+                                }
                             } else {
-                                value
+                                // Use custom quantity
+                                value to selectedUnit
                             }
-                            val finalUnit = if (selectedQty.isNotBlank()) "g" else selectedUnit
                             onQuantitySave(finalQty, finalUnit)
                         }
                     ) {
@@ -459,7 +575,7 @@ fun ChainedInputDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = { onDismiss(currentStep, value) }) {
                 Text("Cancel")
             }
         }

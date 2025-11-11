@@ -136,7 +136,7 @@ fun AddNewExpenseScreenV2(onNextClick: () -> Unit, todoViewModel: TodoViewModel)
         }
     }
 
-    val saveExpense = {
+    val saveExpense: () -> Unit = {
         if (itemName.isNotBlank() && price.isNotBlank()) {
             val currentSelectedDate = todoViewModel.selectedDate.value
             val timestampForSelectedItem = currentSelectedDate.toEpochMilli()
@@ -182,7 +182,10 @@ fun AddNewExpenseScreenV2(onNextClick: () -> Unit, todoViewModel: TodoViewModel)
             // Return focus to item name field
             itemNameFocusRequester.requestFocus()
             
-            Toast.makeText(context, "Expense saved!", Toast.LENGTH_SHORT).show()
+            // Show very brief toast (500ms)
+            val toast = Toast.makeText(context, "Expense saved!", Toast.LENGTH_SHORT)
+            toast.show()
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toast.cancel() }, 500)
         } else {
             Toast.makeText(context, "Please enter item name and price", Toast.LENGTH_SHORT).show()
         }

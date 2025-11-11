@@ -174,7 +174,10 @@ fun AddNewExpenseScreen(onNextClick: () -> Unit, todoViewModel: TodoViewModel) {
                 }
             }
             
-            Toast.makeText(context, "Expense saved!", Toast.LENGTH_SHORT).show()
+            // Show very brief toast (500ms)
+            val toast = Toast.makeText(context, "Expense saved!", Toast.LENGTH_SHORT)
+            toast.show()
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toast.cancel() }, 500)
             onNextClick()
         } else {
             Toast.makeText(context, "Please enter item name and price", Toast.LENGTH_SHORT).show()
