@@ -21,9 +21,13 @@
     <!-- Foreground service permission for persistent overlay -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
     <!-- Boot permission to auto-start overlay -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    
+    <!-- Vibration permission for payment monitor -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name=".KharchajiApplication"
@@ -52,6 +56,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Kharchaji" />
 
         <provider
@@ -122,31 +127,64 @@
             android:taskAffinity=""
             android:excludeFromRecents="true" />
         
+        <!-- Cart Batch Popup Activity -->
+        <activity
+            android:name=".ui.cart.CartBatchPopupActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:taskAffinity=""
+            android:excludeFromRecents="true" />
+        
         <!-- Overlay Service -->
         <service
-            android:name=".overlay.OverlayService"
+            android:name=".ui.overlay.OverlayService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Quick expense entry overlay button" />
         </service>
-        
+
         <!-- Overlay Permission Activity -->
         <activity
-            android:name=".overlay.OverlayPermissionActivity"
+            android:name=".ui.overlay.OverlayPermissionActivity"
             android:exported="false"
             android:theme="@style/Theme.Kharchaji" />
-        
+
         <!-- Boot Receiver for auto-starting overlay -->
+        <!-- exported=false: BOOT_COMPLETED is a protected broadcast delivered by the system
+             regardless of exported flag. exported=true crashes on Android 14+ (API 34). -->
         <receiver
-            android:name=".overlay.BootReceiver"
+            android:name=".ui.overlay.BootReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+        
+        <!-- Payment Monitor Accessibility Service -->
+        <service
+            android:name=".services.payment.PaymentMonitorService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- Notification Listener Service -->
+        <service android:name=".services.payment.NotificationMonitorService"
+            android:label="Kharchaji SMS/Bank Monitor"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

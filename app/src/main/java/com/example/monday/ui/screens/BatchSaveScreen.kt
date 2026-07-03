@@ -1,5 +1,6 @@
 package com.example.monday.ui.screens
-
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,14 +16,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.monday.BatchSaveRecordsHelper
 import com.example.monday.TodoViewModel
-import com.example.monday.formatForDisplay
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BatchSaveScreen(
-    todoViewModel: TodoViewModel,
+    todoViewModel: TodoViewModel, mainViewModel: com.example.monday.viewmodels.MainViewModel, statsViewModel: com.example.monday.viewmodels.StatsViewModel,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -34,7 +34,7 @@ fun BatchSaveScreen(
     var totalDays by remember { mutableStateOf(0) }
     var currentDay by remember { mutableStateOf(0) }
     
-    val batchSaveHelper = remember { BatchSaveRecordsHelper(context, todoViewModel) }
+    val batchSaveHelper = remember { BatchSaveRecordsHelper(context, todoViewModel, mainViewModel, statsViewModel) }
     
     val startDate = remember { LocalDate.of(2024, 3, 23) }
     val endDate = remember { LocalDate.now() }

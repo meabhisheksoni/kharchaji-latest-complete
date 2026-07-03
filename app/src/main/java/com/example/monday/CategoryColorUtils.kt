@@ -1,4 +1,4 @@
-package com.example.monday
+﻿package com.example.monday
 
 import androidx.compose.ui.graphics.Color
 import kotlin.math.abs

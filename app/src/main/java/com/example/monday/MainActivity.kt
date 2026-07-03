@@ -1,5 +1,8 @@
 package com.example.monday
 
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.monday.viewmodels.MainViewModel
+import com.example.monday.viewmodels.SettingsViewModel
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -31,8 +34,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -47,23 +51,21 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.monday.ui.theme.KharchajiTheme
-import com.example.monday.shareExpensesList
-import com.example.monday.MainScreen
-import com.example.monday.DedicatedExpenseListScreen
-import com.example.monday.ShareScreen
+import com.example.monday.ui.overlay.OverlayHelper
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
+import com.example.monday.ModernExpenseListScreen
 import com.example.monday.StatisticsScreen
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.BugReport
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation3.ui.NavDisplay
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.scene.DialogSceneStrategy
+import com.example.monday.core.navigation.*
 import java.time.LocalDate
-import androidx.navigation.NavType
-import androidx.navigation.navArgument
 import com.example.monday.ui.screens.BatchSaveScreen
 import kotlinx.coroutines.launch
 import java.time.ZoneId
@@ -76,13 +78,28 @@ import com.example.monday.MonthlyReportScreen
 import com.example.monday.CategoryFilterScreen
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.example.monday.ui.screens.MasterOnlyCategoriesScreen
 import com.example.monday.ui.screens.MasterCategoryDetailScreen
+import com.example.monday.ui.modern.ModernColors
 
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Ensure edge-to-edge behavior to use the full mobile screen size
+        enableEdgeToEdge()
+        
+        // Auto-start overlay service
+        OverlayHelper.startOverlayService(this)
+        
         setContent {
             KharchajiTheme {
                 Surface(
@@ -96,278 +113,346 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Define navigation routes
-object AppDestinations {
-    const val EXPENSE_LIST = "expenselist"
-    const val ADD_EXPENSE = "addexpense"
-    const val STATISTICS = "statistics"
-    const val SHARE_SCREEN = "sharescreen"
-    const val CALCULATION_RECORDS_BASE = "calculationrecords"
-    const val CALCULATION_RECORDS_ROUTE = "calculationrecords/{dateMillis}"
-    fun calculationRecordsRoute(dateMillis: Long) = "$CALCULATION_RECORDS_BASE/$dateMillis"
-    const val CALCULATION_RECORD_DETAIL = "calculationrecorddetail"
-    const val EDIT_RECORD_DETAIL = "editrecorddetail"
-    const val BATCH_SAVE_SCREEN = "batchsavescreen"
-    const val SETTINGS_SCREEN = "settings"
-    const val ALL_EXPENSES = "allexpenses"
-    const val FIND_AND_REPLACE = "findandreplace"
-    const val MONTHLY_REPORT = "monthly_report"
-    const val CATEGORY_FILTER = "category_filter"
-    const val SPLASH = "splash"
-    const val MASTER_ONLY_CATEGORIES = "master_only_categories"
-    const val MASTER_CATEGORY_DETAIL = "master_category_detail/{category}"
-}
+
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TodoApp(todoViewModel: TodoViewModel = viewModel()) {
-    val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+fun TodoApp(
+    todoViewModel: TodoViewModel = hiltViewModel(),
+    mainViewModel: MainViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    exportViewModel: com.example.monday.viewmodels.ExportViewModel = hiltViewModel(),
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel = hiltViewModel()
+) {
+    val topLevelRoutes = setOf(ExpenseListRoute, StatisticsRoute, ShareScreenRoute, SettingsScreenRoute)
+    val navigationState = rememberNavigationState(startRoute = ExpenseListRoute, topLevelRoutes = topLevelRoutes)
+    val navigator = Navigator(navigationState)
+    val currentRoute = navigationState.topLevelRoute
+
+    val myEntryProvider = entryProvider {
+        entry<ExpenseListRoute> {
+            ModernExpenseListScreen(
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+exportViewModel = exportViewModel,
+                statsViewModel = statsViewModel,
+                settingsViewModel = settingsViewModel,
+                onShareClick = {
+                    navigator.navigate(ShareScreenRoute)
+                },
+                onNavigateToBatchSave = { navigator.navigate(BatchSaveScreenRoute) },
+                onNavigateToSettings = { navigator.navigate(SettingsScreenRoute) },
+                onViewRecordsClick = { 
+                    val currentSelectedDateMillis = mainViewModel.selectedDate.value.toEpochMilli()
+                    navigator.navigate(CalculationRecordsRoute(currentSelectedDateMillis))
+                },
+                onAllExpensesClick = {
+                    navigator.navigate(AllExpensesRoute)
+                }
+            )
+        }
+        entry<AddExpenseRoute> {
+            AddNewExpenseScreenV2(
+                onNextClick = { navigator.goBack() },
+                todoViewModel = todoViewModel
+            )
+        }
+        entry<StatisticsRoute> {
+            StatisticsScreen(
+                onNavigateToAllExpenses = {
+                    navigator.navigate(AllExpensesRoute)
+                },
+                onNavigateToFindAndReplace = {
+                    navigator.navigate(FindAndReplaceRoute)
+                },
+                onNavigateToMonthlyReport = {
+                    navigator.navigate(MonthlyReportRoute)
+                },
+                onNavigateToCategories = {
+                    navigator.navigate(MasterOnlyCategoriesRoute)
+                },
+                onNavigateToTrends = {
+                    navigator.navigate(TrendsRoute)
+                }
+            )
+        }
+        entry<ShareScreenRoute> {
+            val currentSelectedDate by mainViewModel.selectedDate.collectAsState()
+            ShareScreen(
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+                statsViewModel = statsViewModel,
+                currentSelectedDate = currentSelectedDate,
+                onDismiss = { navigator.goBack() }
+            )
+        }
+        entry<CalculationRecordsRoute> { key ->
+            val recordDate: LocalDate? = if (key.dateMillis == 0L) null else Instant.ofEpochMilli(key.dateMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+            
+            CalculationRecordsScreen(
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+statsViewModel = statsViewModel,
+                displayDate = recordDate,
+                onNavigateBack = { navigator.goBack() },
+                onRecordClick = { recordId ->
+                    navigator.navigate(CalculationRecordDetailRoute(recordId))
+                },
+                onEditRecordClick = { recordId ->
+                    navigator.navigate(EditRecordDetailRoute(recordId))
+                }
+            )
+        }
+        entry<CalculationRecordDetailRoute> { key ->
+            CalculationRecordDetailScreen(
+                recordId = key.recordId,
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+statsViewModel = statsViewModel,
+                onNavigateBack = { navigator.goBack() },
+                onSetMemoAndReturnToExpenses = {
+                    navigator.navigate(ExpenseListRoute)
+                }
+            )
+        }
+        entry<EditRecordDetailRoute> { key ->
+            EditRecordScreen(
+                recordId = key.recordId,
+                todoViewModel = todoViewModel,
+                statsViewModel = statsViewModel,
+                onNavigateBack = { navigator.goBack() },
+                onSaveComplete = { navigator.goBack() }
+            )
+        }
+        entry<BatchSaveScreenRoute> {
+            BatchSaveScreen(
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+                statsViewModel = statsViewModel,
+                onNavigateBack = { navigator.goBack() }
+            )
+        }
+        entry<SettingsScreenRoute> {
+            SettingsScreen(
+                viewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+                statsViewModel = statsViewModel,
+                onNavigateBack = { navigator.goBack() }
+            )
+        }
+        entry<AllExpensesRoute> {
+            AllExpensesScreen(
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+                statsViewModel = statsViewModel,
+                onNavigateBack = { navigator.goBack() }
+            )
+        }
+        entry<TrendsRoute> {
+            TrendsScreen(
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+onNavigateBack = { navigator.goBack() }
+            )
+        }
+        entry<FindAndReplaceRoute> {
+            FindAndReplaceScreen(
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+                onNavigateBack = { navigator.goBack() }
+            )
+        }
+        entry<MonthlyReportRoute> {
+            MonthlyReportScreen(
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+statsViewModel = statsViewModel,
+                onNavigateBack = { navigator.goBack() },
+                onNavigateToFilter = {
+                    navigator.navigate(CategoryFilterRoute)
+                },
+                selectedCategories = emptyList() 
+            )
+        }
+        entry<CategoryFilterRoute> {
+            CategoryFilterScreen(
+                todoViewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+                onNavigateBack = { navigator.goBack() },
+                initialSelectedCategories = emptyList(),
+                onApplyFilters = { filters ->
+                    navigator.goBack()
+                }
+            )
+        }
+        entry<MasterOnlyCategoriesRoute> {
+            MasterOnlyCategoriesScreen(
+                viewModel = todoViewModel,
+                mainViewModel = mainViewModel,
+                onNavigateBack = { navigator.goBack() },
+                onCategoryClick = { category ->
+                    navigator.navigate(MasterCategoryDetailRoute(category))
+                }
+            )
+        }
+        entry<MasterCategoryDetailRoute> { key ->
+            MasterCategoryDetailScreen(
+                viewModel = todoViewModel,
+                category = key.category,
+                onNavigateBack = { navigator.goBack() }
+            )
+        }
+    }
 
     Scaffold(
         bottomBar = {
-            if (currentRoute != AppDestinations.ADD_EXPENSE &&
-                currentRoute != AppDestinations.SHARE_SCREEN &&
-                currentRoute != AppDestinations.CALCULATION_RECORD_DETAIL &&
-                !currentRoute.toString().startsWith(AppDestinations.EDIT_RECORD_DETAIL)
+            if (currentRoute !is AddExpenseRoute &&
+                currentRoute !is ShareScreenRoute &&
+                currentRoute !is CalculationRecordDetailRoute &&
+                currentRoute !is EditRecordDetailRoute
             ) {
-                BottomAppBar(
-                    tonalElevation = 0.dp,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    actions = {
-                        IconButton(onClick = { navController.navigate(AppDestinations.EXPENSE_LIST) }) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.List,
-                                contentDescription = "Expense List",
-                                tint = if (currentRoute == AppDestinations.EXPENSE_LIST) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { navController.navigate(AppDestinations.STATISTICS) }) {
-                            Icon(
-                                Icons.Filled.Assessment,
-                                contentDescription = "Statistics",
-                                tint = if (currentRoute == AppDestinations.STATISTICS) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Spacer(Modifier.width(48.dp))
-                    },
-                    floatingActionButton = {
-                        FloatingActionButton(
-                            onClick = { navController.navigate(AppDestinations.ADD_EXPENSE) },
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Gradient divider
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp)
+                                .height(1.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            ModernColors.EggnogLight.copy(alpha = 0.3f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                )
+                        )
+                        // Nav bar
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RectangleShape,
+                            color = ModernColors.SoftCream,
+                            shadowElevation = 0.dp
                         ) {
-                            Icon(Icons.Filled.Add, "Add new expense")
+                            NavigationBar(
+                                containerColor = Color.Transparent,
+                                tonalElevation = 0.dp,
+                                windowInsets = WindowInsets(0.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Home
+                                NavigationBarItem(
+                                    selected = currentRoute is ExpenseListRoute,
+                                    onClick = {
+                                        if (currentRoute !is ExpenseListRoute)
+                                            navigator.navigate(ExpenseListRoute)
+                                    },
+                                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home", modifier = Modifier.size(22.dp)) },
+                                    label = { Text("Home", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color(0xFF222222),
+                                        selectedTextColor = Color(0xFF222222),
+                                        unselectedIconColor = Color(0xFF999999),
+                                        unselectedTextColor = Color(0xFF999999),
+                                        indicatorColor = Color.Transparent
+                                    )
+                                )
+
+                                // Insights
+                                NavigationBarItem(
+                                    selected = currentRoute is StatisticsRoute,
+                                    onClick = { navigator.navigate(StatisticsRoute) },
+                                    icon = { Icon(Icons.Filled.Assessment, contentDescription = "Insights", modifier = Modifier.size(22.dp)) },
+                                    label = { Text("Insights", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color(0xFF222222),
+                                        selectedTextColor = Color(0xFF222222),
+                                        unselectedIconColor = Color(0xFF999999),
+                                        unselectedTextColor = Color(0xFF999999),
+                                        indicatorColor = Color.Transparent
+                                    )
+                                )
+
+                                // Export
+                                val exportCount by exportViewModel.exportBufferCount.collectAsState()
+                                NavigationBarItem(
+                                    selected = currentRoute is ShareScreenRoute,
+                                    onClick = { navigator.navigate(ShareScreenRoute) },
+                                    icon = {
+                                        BadgedBox(
+                                            badge = {
+                                                if (exportCount > 0) {
+                                                    Badge(containerColor = Color.Red, contentColor = Color.White) {
+                                                        Text("$exportCount")
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Icon(Icons.Filled.Share, contentDescription = "Export", modifier = Modifier.size(22.dp))
+                                        }
+                                    },
+                                    label = { Text("Export", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color(0xFF222222),
+                                        selectedTextColor = Color(0xFF222222),
+                                        unselectedIconColor = Color(0xFF999999),
+                                        unselectedTextColor = Color(0xFF999999),
+                                        indicatorColor = Color.Transparent
+                                    )
+                                )
+
+                                // Settings
+                                NavigationBarItem(
+                                    selected = currentRoute is SettingsScreenRoute,
+                                    onClick = { navigator.navigate(SettingsScreenRoute) },
+                                    icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings", modifier = Modifier.size(22.dp)) },
+                                    label = { Text("Settings", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color(0xFF222222),
+                                        selectedTextColor = Color(0xFF222222),
+                                        unselectedIconColor = Color(0xFF999999),
+                                        unselectedTextColor = Color(0xFF999999),
+                                        indicatorColor = Color.Transparent
+                                    )
+                                )
+                            }
                         }
                     }
-                )
+
+                    // Floating "+" FAB
+                    FloatingActionButton(
+                        onClick = { navigator.navigate(AddExpenseRoute) },
+                        containerColor = Color(0xFF222222),
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(22.dp),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 18.dp)
+                            .offset(y = (-44).dp)
+                            .size(52.dp),
+                        elevation = FloatingActionButtonDefaults.elevation(
+                            defaultElevation = 10.dp,
+                            pressedElevation = 16.dp
+                        )
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "Add", modifier = Modifier.size(24.dp))
+                    }
+                }
             }
         }
+
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = AppDestinations.EXPENSE_LIST,
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable(AppDestinations.EXPENSE_LIST) {
-                DedicatedExpenseListScreen(
-                    todoViewModel = todoViewModel,
-                    onShareClick = {
-                        navController.navigate(AppDestinations.SHARE_SCREEN)
-                    },
-                    onNavigateToBatchSave = { navController.navigate(AppDestinations.BATCH_SAVE_SCREEN) },
-                    onNavigateToSettings = { navController.navigate(AppDestinations.SETTINGS_SCREEN) },
-                    onViewRecordsClick = { 
-                        val currentSelectedDateMillis = todoViewModel.selectedDate.value.toEpochMilli()
-                        Log.d("NavigationDebug", "Navigating to CalculationRecords with dateMillis: $currentSelectedDateMillis")
-                        val route = AppDestinations.calculationRecordsRoute(currentSelectedDateMillis)
-                        Log.d("NavigationDebug", "Attempting route: $route")
-                        navController.navigate(route)
-                    },
-                    onAllExpensesClick = {
-                        navController.navigate(AppDestinations.ALL_EXPENSES)
-                    }
-                )
-            }
-            composable(AppDestinations.ADD_EXPENSE) {
-                Log.d("MainActivity", "Loading AddNewExpenseScreenV2")
-                AddNewExpenseScreenV2(
-                    todoViewModel = todoViewModel,
-                    onNextClick = { navController.popBackStack() }
-                )
-            }
-            composable(AppDestinations.STATISTICS) {
-                StatisticsScreen(
-                    onNavigateToAllExpenses = {
-                        navController.navigate(AppDestinations.ALL_EXPENSES)
-                    },
-                    onNavigateToFindAndReplace = {
-                        navController.navigate(AppDestinations.FIND_AND_REPLACE)
-                    },
-                    onNavigateToMonthlyReport = {
-                        navController.navigate(AppDestinations.MONTHLY_REPORT)
-                    },
-                    onNavigateToCategories = {
-                        navController.navigate(AppDestinations.MASTER_ONLY_CATEGORIES)
-                    }
-                )
-            }
-            composable(AppDestinations.SHARE_SCREEN) {
-                val currentSelectedDate by todoViewModel.selectedDate.collectAsState()
-                ShareScreen(
-                    todoViewModel = todoViewModel,
-                    currentSelectedDate = currentSelectedDate,
-                    onDismiss = { navController.popBackStack() }
-                )
-            }
-            composable(
-                route = AppDestinations.CALCULATION_RECORDS_ROUTE,
-                arguments = listOf(navArgument("dateMillis") { type = NavType.LongType })
-            ) { backStackEntry ->
-                Log.d("NavigationDebug", "Entered CALCULATION_RECORDS_ROUTE composable")
-                val dateMillisFromArgs = backStackEntry.arguments?.getLong("dateMillis")
-                Log.d("NavigationDebug", "dateMillis from args: $dateMillisFromArgs")
-
-                val recordDate: LocalDate? = dateMillisFromArgs?.let { millis -> 
-                    if (millis == 0L && backStackEntry.arguments?.containsKey("dateMillis") == false) {
-                        Log.d("NavigationDebug", "dateMillis was 0L and key was missing, treating as null.")
-                        null
-                    } else {
-                        Log.d("NavigationDebug", "Converting millis $millis to LocalDate")
-                        millis.toLocalDate()
-                    }
-                }
-                Log.d("NavigationDebug", "Final recordDate: $recordDate")
-                
-                CalculationRecordsScreen(
-                    todoViewModel = todoViewModel,
-                    displayDate = recordDate,
-                    onNavigateBack = { navController.popBackStack() },
-                    onRecordClick = { recordId ->
-                        navController.navigate("${AppDestinations.CALCULATION_RECORD_DETAIL}/$recordId")
-                    },
-                    onEditRecordClick = { recordId ->
-                        navController.navigate("${AppDestinations.EDIT_RECORD_DETAIL}/$recordId")
-                    }
-                )
-            }
-            composable("${AppDestinations.CALCULATION_RECORD_DETAIL}/{recordId}") { backStackEntry ->
-                val recordId = backStackEntry.arguments?.getString("recordId")?.toIntOrNull()
-                if (recordId != null) {
-                    CalculationRecordDetailScreen(
-                        recordId = recordId,
-                        todoViewModel = todoViewModel,
-                        onNavigateBack = { navController.popBackStack() },
-                        onSetMemoAndReturnToExpenses = {
-                            navController.popBackStack(AppDestinations.EXPENSE_LIST, inclusive = false)
-                        }
-                    )
-                } else {
-                    navController.popBackStack()
-                }
-            }
-            composable("${AppDestinations.EDIT_RECORD_DETAIL}/{recordId}") { backStackEntry ->
-                val recordId = backStackEntry.arguments?.getString("recordId")?.toIntOrNull()
-                if (recordId != null) {
-                    EditRecordScreen(
-                        recordId = recordId,
-                        todoViewModel = todoViewModel,
-                        onNavigateBack = { navController.popBackStack() },
-                        onSaveComplete = { navController.popBackStack() }
-                    )
-                } else {
-                    navController.popBackStack()
-                }
-            }
-            
-            composable(AppDestinations.BATCH_SAVE_SCREEN) {
-                BatchSaveScreen(
-                    todoViewModel = todoViewModel,
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-            
-            composable(AppDestinations.SETTINGS_SCREEN) {
-                SettingsScreen(
-                    viewModel = todoViewModel,
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-            
-            composable(AppDestinations.ALL_EXPENSES) {
-                AllExpensesScreen(
-                    todoViewModel = todoViewModel,
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-            
-            composable(AppDestinations.FIND_AND_REPLACE) {
-                FindAndReplaceScreen(
-                    todoViewModel = todoViewModel,
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-            
-            composable(AppDestinations.MONTHLY_REPORT) {
-                val selectedCategories by navController
-                    .currentBackStackEntry!!
-                    .savedStateHandle
-                    .getLiveData<List<String>>("selected_categories")
-                    .observeAsState(emptyList())
-
-                MonthlyReportScreen(
-                    todoViewModel = todoViewModel,
-                    onNavigateBack = { navController.popBackStack() },
-                    onNavigateToFilter = {
-                        navController.navigate(AppDestinations.CATEGORY_FILTER)
-                    },
-                    selectedCategories = selectedCategories
-                )
-            }
-            composable(AppDestinations.CATEGORY_FILTER) {
-                val initialCategories = navController
-                    .previousBackStackEntry
-                    ?.savedStateHandle
-                    ?.get<List<String>>("selected_categories") ?: emptyList()
-                
-                CategoryFilterScreen(
-                    todoViewModel = todoViewModel,
-                    onNavigateBack = { navController.popBackStack() },
-                    initialSelectedCategories = initialCategories,
-                    onApplyFilters = { filters ->
-                        navController.previousBackStackEntry
-                            ?.savedStateHandle
-                            ?.set("selected_categories", filters)
-                        navController.popBackStack()
-                    }
-                )
-            }
-            composable(AppDestinations.MASTER_ONLY_CATEGORIES) {
-                MasterOnlyCategoriesScreen(
-                    viewModel = todoViewModel,
-                    onNavigateBack = { navController.popBackStack() },
-                    onCategoryClick = { category ->
-                        navController.navigate("${AppDestinations.MASTER_CATEGORY_DETAIL}/$category")
-                    }
-                )
-            }
-
-            composable(AppDestinations.MASTER_CATEGORY_DETAIL) { backStackEntry ->
-                val category = backStackEntry.arguments?.getString("category") ?: ""
-                MasterCategoryDetailScreen(
-                    viewModel = todoViewModel,
-                    category = category,
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-        }
+        NavDisplay(
+            entries = navigationState.toEntries(myEntryProvider),
+            modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
+            onBack = { navigator.goBack() },
+            sceneStrategy = DialogSceneStrategy()
+        )
     }
 }
-
 @RequiresApi(Build.VERSION_CODES.O)
 @Preview(showBackground = true)
 @Composable

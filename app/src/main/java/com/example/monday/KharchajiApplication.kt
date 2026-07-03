@@ -5,9 +5,12 @@ import android.util.Log
 import androidx.work.Configuration
 import com.example.monday.workers.BackupManager
 
+import dagger.hilt.android.HiltAndroidApp
+
 /**
  * Application class to initialize app-wide functionality
  */
+@HiltAndroidApp
 class KharchajiApplication : Application(), Configuration.Provider {
 
     companion object {
@@ -16,10 +19,19 @@ class KharchajiApplication : Application(), Configuration.Provider {
     
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "Application initialized")
         
         // LeakCanary 2.x auto-installs itself, no manual initialization needed
-        Log.d(TAG, "LeakCanary auto-initialized for memory leak detection")
+        
+        // Anti-Fragile Hack: Ignore framework-level Compose AccessibilityManager false positives.
+        // We use reflection so it only executes when DebugLeakCleaner (in src/debug) is actually present.
+        try {
+            val debugCleanerClass = Class.forName("com.example.monday.DebugLeakCleaner")
+            val instance = debugCleanerClass.getDeclaredConstructor().newInstance()
+            val method = debugCleanerClass.getMethod("applyFix")
+            method.invoke(instance)
+        } catch (e: Exception) {
+            // Ignored in release build where this class doesn't exist
+        }
         
         // Schedule automatic backups
         BackupManager.scheduleAutoBackups(
@@ -28,8 +40,6 @@ class KharchajiApplication : Application(), Configuration.Provider {
             requiresCharging = true,
             requiresNetwork = false
         )
-        
-        Log.d(TAG, "Automatic backups scheduled")
     }
     
     /**

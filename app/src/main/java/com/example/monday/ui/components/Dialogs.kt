@@ -1,4 +1,4 @@
-package com.example.monday.ui.components
+﻿package com.example.monday.ui.components
 
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement

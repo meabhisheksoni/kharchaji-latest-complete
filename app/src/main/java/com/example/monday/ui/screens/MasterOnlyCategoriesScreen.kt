@@ -17,14 +17,14 @@ import kotlinx.coroutines.flow.collectLatest
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MasterOnlyCategoriesScreen(
-    viewModel: TodoViewModel,
+    viewModel: TodoViewModel, mainViewModel: com.example.monday.viewmodels.MainViewModel,
     onNavigateBack: () -> Unit,
     onCategoryClick: (String) -> Unit
 ) {
     var categories by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        viewModel.getMasterOnlyCategories().collectLatest { cats ->
+        viewModel.getMasterOnlyCategories(mainViewModel.todoItems).collectLatest { cats ->
             categories = cats.sorted()
         }
     }

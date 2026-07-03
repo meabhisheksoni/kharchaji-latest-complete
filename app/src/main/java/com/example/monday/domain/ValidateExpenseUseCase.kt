@@ -29,7 +29,6 @@ class ValidateExpenseUseCase {
      * Validate expense input and return a ValidationResult
      */
     operator fun invoke(description: String, price: String): ValidationResult {
-        Log.d("ExpenseValidation", "Validating expense: '$description', price: '$price'")
         
         // Check for empty description
         if (description.isBlank()) {

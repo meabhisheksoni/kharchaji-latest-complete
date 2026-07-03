@@ -1,4 +1,9 @@
 package com.example.monday
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
+import com.example.monday.data.models.CalculationRecord
+import com.example.monday.data.models.RecordItem
+import com.example.monday.viewmodels.MainViewModel
 
 import android.util.Log
 import androidx.compose.foundation.background
@@ -13,7 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.outlined.HelpOutline
-import androidx.compose.material.ripple.rememberRipple
+import androidx.compose.material3.ripple
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,7 +45,8 @@ import com.example.monday.ui.components.UncategorizedExpensesDialog
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MonthlyReportScreen(
-    todoViewModel: TodoViewModel,
+    todoViewModel: TodoViewModel, mainViewModel: MainViewModel,
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToFilter: () -> Unit,
     selectedCategories: List<String>
@@ -49,7 +55,7 @@ fun MonthlyReportScreen(
     var selectedYear by remember { mutableStateOf(currentYear) }
     val coroutineScope = rememberCoroutineScope()
 
-    val allCategories by todoViewModel.todoItems.map { items ->
+    val allCategories by mainViewModel.todoItems.map { items ->
         items.flatMap { parseCategoryInfo(it.text).second }.toSet()
     }.collectAsState(initial = emptySet())
 
@@ -66,24 +72,30 @@ fun MonthlyReportScreen(
     // Load master record data for the selected year
     LaunchedEffect(selectedYear) {
         isLoading = true
+        
+        // Single batch database query for the entire year to prevent N+1 queries
+        val startOfYearMillis = YearMonth.of(selectedYear, 1).atDay(1)
+            .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val endOfYearMillis = YearMonth.of(selectedYear, 12).atEndOfMonth()
+            .plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
+            
+        val allYearMasterRecords = statsViewModel.getMasterRecordsForMonth(startOfYearMillis, endOfYearMillis)
+        
+        // Group by YearMonth in memory
+        val groupedRecords = allYearMasterRecords.groupBy { record -> 
+            YearMonth.from(Instant.ofEpochMilli(record.recordDate).atZone(ZoneId.systemDefault()))
+        }
+        
         val yearData = mutableMapOf<YearMonth, Map<String, Double>>()
         val recordsData = mutableMapOf<YearMonth, List<CalculationRecord>>()
         
-        // For each month in the year, fetch master record data
+        // Populate all 12 months so the UI grid doesn't break
         for (month in 1..12) {
             val yearMonth = YearMonth.of(selectedYear, month)
-            val monthData = todoViewModel.getMasterRecordTotalsForMonth(yearMonth)
-            yearData[yearMonth] = monthData
+            val monthRecords = groupedRecords[yearMonth] ?: emptyList()
             
-            // Also store the actual master records for this month
-            val startOfMonthMillis = yearMonth.atDay(1)
-                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val endOfMonthMillis = yearMonth.atEndOfMonth()
-                .plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
-            
-            // Get master records for this month
-            val masterRecords = todoViewModel.getMasterRecordsForMonth(startOfMonthMillis, endOfMonthMillis)
-            recordsData[yearMonth] = masterRecords
+            recordsData[yearMonth] = monthRecords
+            yearData[yearMonth] = statsViewModel.calculateMasterRecordTotals(monthRecords)
         }
         
         masterRecordsByMonth = yearData
@@ -109,7 +121,7 @@ fun MonthlyReportScreen(
                 monthData.values.sum()
             } ?: 0.0
         }
-    }.value
+    }
 
     var showDetailDialog by remember { mutableStateOf(false) }
     var dialogItems by remember { mutableStateOf<List<TodoItem>>(emptyList()) }
@@ -228,7 +240,7 @@ fun MonthlyReportScreen(
                             modifier = Modifier.weight(1f),
                             month = month,
                             expenses = monthExpenses,
-                            maxTotal = maxMonthlyTotal,
+                            maxTotal = maxMonthlyTotal.value, 
                             categoryColors = categoryColors,
                             onClick = {
                                 if (monthMasterRecords.isNotEmpty() || monthExpenses.isNotEmpty()) {
@@ -256,13 +268,6 @@ private fun filterMonthlyExpenses(
     
     val result = mutableMapOf<YearMonth, MutableMap<String, Double>>()
     
-    // Separate the selected categories by type for efficient checking
-    val selectedPrimary = selectedCategories.filter { getCategoryType(it) == CategoryType.PRIMARY }.toSet()
-    val selectedSecondary = selectedCategories.filter { getCategoryType(it) == CategoryType.SECONDARY }.toSet()
-    val selectedTertiary = selectedCategories.filter { getCategoryType(it) == CategoryType.TERTIARY }.toSet()
-    
-    Log.d("MonthlyReport", "Filtering with categories - Primary: $selectedPrimary, Secondary: $selectedSecondary, Tertiary: $selectedTertiary")
-    
     // Process each month
     for ((yearMonth, masterRecords) in masterRecordsForDialog) {
         val monthResult = mutableMapOf<String, Double>()
@@ -276,37 +281,18 @@ private fun filterMonthlyExpenses(
                 val categories = item.categories ?: continue
                 val price = item.price.toDoubleOrNull() ?: 0.0
                 
-                // For each category in the item, check if it should be included
-                for (category in categories) {
-                    val hasSelectedPrimary = selectedPrimary.isNotEmpty()
-                    val hasSelectedSecondary = selectedSecondary.isNotEmpty()
-                    val hasSelectedTertiary = selectedTertiary.isNotEmpty()
-                    
-                    val shouldShow = when {
-                        // If tertiary is selected, we only show tertiary when primary and secondary match
-                        selectedTertiary.isNotEmpty() -> {
-                            category in selectedTertiary && hasSelectedPrimary && hasSelectedSecondary
-                        }
-                        
-                        // If secondary is selected, we only show secondary when primary matches
-                        selectedSecondary.isNotEmpty() -> {
-                            category in selectedSecondary && hasSelectedPrimary
-                        }
-                        
-                        // If only primary is selected, we show primary categories
-                        else -> category in selectedPrimary
-                    }
-                    
-                    if (shouldShow) {
-                        // Add the price to our result for this category
-                        monthResult[category] = (monthResult[category] ?: 0.0) + price
-                        Log.d("MonthlyReport", "Hierarchical match for '$category' in item ${item.description}: $price")
-                    }
+                // Check if any of the item's categories match the selected categories
+                val matchingCategories = categories.filter { it in selectedCategories }
+                
+                if (matchingCategories.isNotEmpty()) {
+                    // Only add the price ONCE per item, using the first matching category
+                    // This prevents double/triple counting when an item has multiple selected categories
+                    val primaryMatchingCategory = matchingCategories.first()
+                    monthResult[primaryMatchingCategory] = (monthResult[primaryMatchingCategory] ?: 0.0) + price
+                    Log.d("MonthlyReport", "Match for '$primaryMatchingCategory' in item ${item.description}: $price (had ${matchingCategories.size} matching categories)")
                 }
             }
         }
-        
-        Log.d("MonthlyReport", "Final result for $yearMonth: ${monthResult.entries.joinToString { "${it.key}=${it.value}" }}")
         result[yearMonth] = monthResult
     }
     return result
@@ -366,15 +352,15 @@ fun StackedBarMonth(
     // Format amount for display
     val formattedAmount = remember(totalExpense) {
         when {
-            totalExpense >= 10000000 -> { // ≥ 1 Cr
+            totalExpense >= 10000000 -> { // â‰¥ 1 Cr
                 val crores = totalExpense / 10000000
                 "₹${String.format("%.1f", crores)}Cr"
             }
-            totalExpense >= 100000 -> { // ≥ 1 Lakh
+            totalExpense >= 100000 -> { // â‰¥ 1 Lakh
                 val lakhs = totalExpense / 100000
                 "₹${String.format("%.1f", lakhs)}L"
             }
-            totalExpense >= 1000 -> { // ≥ 1K
+            totalExpense >= 1000 -> { // â‰¥ 1K
                 val thousands = totalExpense / 1000
                 "₹${String.format("%.0f", thousands)}K"
             }
@@ -390,7 +376,7 @@ fun StackedBarMonth(
             .fillMaxHeight()
             .clickable(
                 interactionSource = interactionSource,
-                indication = rememberRipple(bounded = true),
+                indication = ripple(),
                 enabled = expenses.isNotEmpty(),
                 onClick = onClick
             ),

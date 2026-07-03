@@ -32,7 +32,8 @@ import androidx.compose.material.icons.filled.Search
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AllExpensesScreen(
-    todoViewModel: TodoViewModel,
+    todoViewModel: TodoViewModel, mainViewModel: com.example.monday.viewmodels.MainViewModel,
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel,
     onNavigateBack: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -40,7 +41,7 @@ fun AllExpensesScreen(
     
     // Get all expenses from master-saved records
     val allExpensesFlow = remember { 
-        todoViewModel.getAllMasterSavedExpenseDisplayItems()
+        statsViewModel.getAllMasterSavedExpenseDisplayItems()
     }
     var allExpenses by remember { mutableStateOf<List<ExpenseDisplayItem>>(emptyList()) }
     
@@ -164,7 +165,10 @@ fun AllExpensesScreen(
                             )
                         }
                         
-                        items(expenses) { expense ->
+                        items(
+                            items = expenses,
+                            key = { expense -> "${expense.description}_${expense.price}_${expense.quantity.hashCode()}" }
+                        ) { expense ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

@@ -22,8 +22,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 
 // Project specific imports
-import com.example.monday.TodoItem
-import com.example.monday.shareExpensesList
+import com.example.monday.data.models.TodoItem
+import com.example.monday.core.utils.shareExpensesList
+import com.example.monday.core.utils.parsePrice
 
 // ExpensesList composable might be needed if it was a separate component.
 // For now, assuming a simple LazyColumn as in the MainActivity modification.
@@ -32,6 +33,8 @@ import com.example.monday.shareExpensesList
 @Composable
 fun ShareScreen(
     todoViewModel: TodoViewModel,
+    mainViewModel: com.example.monday.viewmodels.MainViewModel,
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel,
     currentSelectedDate: LocalDate,
     onDismiss: () -> Unit
 ) {
@@ -40,7 +43,7 @@ fun ShareScreen(
     val coroutineScope = rememberCoroutineScope()
 
     // Get items for the selected date and filter by isDone
-    val itemsForDate by todoViewModel.getExpensesForDate(currentSelectedDate).collectAsState(initial = emptyList())
+    val itemsForDate by mainViewModel.getExpensesForDate(currentSelectedDate).collectAsState(initial = emptyList())
     val itemsToShare = itemsForDate.filter { it.isDone }
     val sumToShare = itemsToShare.sumOf { parsePrice(it.text) }
 
@@ -127,7 +130,7 @@ fun ShareScreen(
                                 // 2. Iterate from the 1st of the month to the currentSelectedDate
                                 for (dayOfMonth in 1..currentSelectedDate.dayOfMonth) {
                                     val dateForLoop = LocalDate.of(currentYear, currentMonth, dayOfMonth)
-                                    val recordsFlow = todoViewModel.getCalculationRecordsForDate(dateForLoop)
+                                    val recordsFlow = statsViewModel.getCalculationRecordsForDate(dateForLoop)
                                     val recordsForDay = recordsFlow.first() // Get the list of records for this day
 
                                     if (recordsForDay.isNotEmpty()) {

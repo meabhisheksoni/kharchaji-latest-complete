@@ -26,9 +26,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 // Project-specific imports
-import com.example.monday.TodoItem
-import com.example.monday.parseItemText
-import com.example.monday.formatForDisplay
+import com.example.monday.data.models.TodoItem
+import com.example.monday.core.utils.parseItemText
+import com.example.monday.core.utils.formatForDisplay
+import com.example.monday.core.utils.parsePrice
 
 fun shareExpensesList(
     context: Context,
@@ -885,10 +886,10 @@ object ShareUtils {
     /**
      * Share the entire expense database as HTML
      */
-    suspend fun shareFullDatabaseAsHtml(context: Context, todoViewModel: TodoViewModel, filterByCategories: List<String>? = null) {
+    suspend fun shareFullDatabaseAsHtml(context: Context, todoViewModel: TodoViewModel, mainViewModel: com.example.monday.viewmodels.MainViewModel, filterByCategories: List<String>? = null) {
         withContext(Dispatchers.IO) {
             Log.d("ShareUtils", "Fetching all expenses for HTML export")
-            val allExpenses = todoViewModel.getAllExpensesForExport()
+            val allExpenses = mainViewModel.getAllExpensesForExport()
             
             // Create a modified categoriesByType map that places selected categories only in primary
             val categoriesByType = if (!filterByCategories.isNullOrEmpty()) {
@@ -907,7 +908,7 @@ object ShareUtils {
             // Get expenses for export based on filter
             val filteredExpenses = if (!filterByCategories.isNullOrEmpty()) {
                 allExpenses.filter { expense ->
-                    expense.categories?.any { category -> filterByCategories.contains(category) } == true
+                    expense.categories?.any { category: String -> filterByCategories.contains(category) } == true
                 }
             } else {
                 allExpenses

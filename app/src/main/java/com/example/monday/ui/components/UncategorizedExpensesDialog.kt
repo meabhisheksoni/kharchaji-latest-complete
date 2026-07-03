@@ -1,14 +1,15 @@
 package com.example.monday.ui.components
-
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import com.example.monday.core.utils.formatIndianCurrency
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,10 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
-import com.example.monday.TodoItem
 import com.example.monday.TodoViewModel
-import com.example.monday.formatIndianCurrency
-import com.example.monday.parsePrice
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -167,7 +165,9 @@ private fun ExpensesList(expenses: List<CategoryExpenseItem>, title: String) {
             Spacer(modifier = Modifier.height(8.dp))
             
             // List of expenses
-            LazyColumn {
+            // heightIn provides bounded max height — prevents infinite constraint crash
+            // inside AlertDialog (which doesn't provide bounded height to its content)
+            LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
                 items(expenses) { expense ->
                     ExpenseItemCard(expense)
                 }
@@ -259,3 +259,5 @@ private fun convertToExpenseItems(items: List<TodoItem>): List<CategoryExpenseIt
         )
     }.sortedByDescending { it.date }  // Most recent first
 } 
+
+

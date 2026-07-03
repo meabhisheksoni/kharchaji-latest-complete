@@ -5,6 +5,8 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
@@ -54,7 +56,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class, ExperimentalComposeUiApi::class)
 @Composable
-fun AddNewExpenseScreenV2(onNextClick: () -> Unit, todoViewModel: TodoViewModel) {
+fun AddNewExpenseScreenV2(onNextClick: () -> Unit, todoViewModel: TodoViewModel, mainViewModel: com.example.monday.viewmodels.MainViewModel = androidx.hilt.navigation.compose.hiltViewModel()) {
     // Add debug logs
     Log.d("AddNewExpenseScreen", "AddNewExpenseScreenV2 composable started")
     
@@ -120,7 +122,7 @@ fun AddNewExpenseScreenV2(onNextClick: () -> Unit, todoViewModel: TodoViewModel)
             try {
                 tempCameraImageUri = createImageFile(context)
                 Log.d("AddNewExpenseScreen", "Created camera image file: $tempCameraImageUri")
-                takePictureLauncher.launch(tempCameraImageUri)
+                takePictureLauncher.launch(tempCameraImageUri!!)
             } catch (e: Exception) {
                 Log.e("ImageDebug", "Error creating camera image file", e)
                 Toast.makeText(context, "Error creating image file: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -138,8 +140,8 @@ fun AddNewExpenseScreenV2(onNextClick: () -> Unit, todoViewModel: TodoViewModel)
 
     val saveExpense: () -> Unit = {
         if (itemName.isNotBlank() && price.isNotBlank()) {
-            val currentSelectedDate = todoViewModel.selectedDate.value
-            val timestampForSelectedItem = currentSelectedDate.toEpochMilli()
+            val currentSelectedDate = mainViewModel.selectedDate.value
+            val timestampForSelectedItem = currentSelectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
             
             // Format price
             val formattedPrice = String.format("%.2f", price.toDoubleOrNull() ?: 0.0)
@@ -169,7 +171,7 @@ fun AddNewExpenseScreenV2(onNextClick: () -> Unit, todoViewModel: TodoViewModel)
             )
             
             // Add the item to the database
-            todoViewModel.addItem(newItem)
+            mainViewModel.addItem(newItem)
             
             // Reset fields for new entry
             itemName = ""
@@ -427,7 +429,7 @@ fun AddNewExpenseScreenV2(onNextClick: () -> Unit, todoViewModel: TodoViewModel)
                                         try {
                                             tempCameraImageUri = createImageFile(context)
                                             Log.d("AddNewExpenseScreen", "Created camera image file: $tempCameraImageUri")
-                                            takePictureLauncher.launch(tempCameraImageUri)
+                                            takePictureLauncher.launch(tempCameraImageUri!!)
                                         } catch (e: Exception) {
                                             Log.e("ImageDebug", "Error creating camera image file", e)
                                             Toast.makeText(context, "Error creating image file: ${e.message}", Toast.LENGTH_SHORT).show()

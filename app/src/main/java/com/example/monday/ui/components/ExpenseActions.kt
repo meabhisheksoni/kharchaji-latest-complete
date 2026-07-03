@@ -1,4 +1,6 @@
 package com.example.monday.ui.components
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 
 import android.util.Log
 import android.widget.Toast
@@ -29,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.monday.TodoItem
 import com.example.monday.TodoViewModel
 
 // Helper function to parse categories from expense text
@@ -57,7 +58,7 @@ fun ExpenseActions(
     onDeleteAllClick: () -> Unit,
     onCategoriesClick: (List<String>, Boolean, Boolean, Boolean) -> Unit = { _, _, _, _ -> },
     selectedExpenses: List<TodoItem> = emptyList(),
-    viewModel: TodoViewModel
+    viewModel: TodoViewModel, mainViewModel: com.example.monday.viewmodels.MainViewModel
 ) {
     var showCategoryDialog by remember { mutableStateOf(false) }
     
@@ -146,18 +147,13 @@ fun ExpenseActions(
                 // Apply the categories and also uncheck items in a single update to avoid resetting categories
                 // Don't call the separate functions as that causes multiple updates
                 if (categoryNames.isNotEmpty()) {
-                    Log.d("CategoryDebug", "==== APPLYING CATEGORIES ====")
-                    Log.d("CategoryDebug", "Categories selected: $categoryNames")
-                    Log.d("CategoryDebug", "Primary: $hasPrimary, Secondary: $hasSecondary, Tertiary: $hasTertiary")
-                    Log.d("CategoryDebug", "Items to apply to: ${selectedExpenses.size}")
                     
                 selectedExpenses.forEach { item ->
                         val (baseText, _) = parseCategoryInfo(item.text)
                         val categoryCodes = "|CATS:" + categoryNames.joinToString(",")
                         
                         // Update the item with the new categories and flags AND uncheck it in one go
-                        Log.d("CategoryDebug", "Applying to item ${item.id}")
-                        viewModel.updateItem(item.copy(
+                        mainViewModel.updateItem(item.copy(
                             text = baseText + categoryCodes,
                             categories = categoryNames,
                             hasPrimaryCategory = hasPrimary,
@@ -173,8 +169,6 @@ fun ExpenseActions(
                         "Categories applied to ${selectedExpenses.size} items",
                         Toast.LENGTH_SHORT
                     ).show() */
-                    
-                    Log.d("CategoryDebug", "==== CATEGORY APPLICATION COMPLETE ====")
                 }
                 
                 // Close the dialog
@@ -185,3 +179,4 @@ fun ExpenseActions(
         )
     }
 } 
+

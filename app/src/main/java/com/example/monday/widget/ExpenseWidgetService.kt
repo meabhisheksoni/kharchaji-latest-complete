@@ -1,12 +1,13 @@
 package com.example.monday.widget
-
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
+import com.example.monday.data.local.TodoDao
+import com.example.monday.data.local.AppDatabase
 import android.app.Service
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
-import com.example.monday.AppDatabase
-import com.example.monday.TodoItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,7 +41,6 @@ class ExpenseWidgetService : Service() {
                     putString("selected_unit", "") // Clear unit
                     apply()
                 }
-                Log.d("WidgetService", "Selected quantity: $quantity")
             }
             
             "SELECT_UNIT" -> {
@@ -50,7 +50,6 @@ class ExpenseWidgetService : Service() {
                     putString("selected_quantity", "") // Clear predefined
                     apply()
                 }
-                Log.d("WidgetService", "Selected unit: $unit")
             }
             
             "SUBMIT_EXPENSE" -> {
@@ -68,8 +67,6 @@ class ExpenseWidgetService : Service() {
                 val selectedQuantity = prefs.getString("selected_quantity", "") ?: ""
                 val customQuantity = prefs.getString("custom_quantity", "") ?: ""
                 val selectedUnit = prefs.getString("selected_unit", "") ?: ""
-                
-                Log.d("WidgetService", "Submitting: item=$itemName, price=$price, qty=$selectedQuantity, custom=$customQuantity, unit=$selectedUnit")
                 
                 if (itemName.isBlank() || price.isBlank()) {
                     Log.e("WidgetService", "Item name or price is blank")
@@ -107,8 +104,6 @@ class ExpenseWidgetService : Service() {
                 val database = AppDatabase.getDatabase(applicationContext)
                 database.todoDao().insert(newItem)
                 
-                Log.d("WidgetService", "Expense added successfully: $itemText")
-                
                 // Clear the form
                 prefs.edit().apply {
                     putString("item_name", "")
@@ -129,3 +124,6 @@ class ExpenseWidgetService : Service() {
         }
     }
 }
+
+
+

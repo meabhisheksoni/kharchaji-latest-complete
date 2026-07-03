@@ -2,18 +2,21 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.google.devtools.ksp)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.hilt.android)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
     namespace = "com.example.monday"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.monday"
         minSdk = 29
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 35
+        versionCode = 2
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -23,14 +26,8 @@ android {
 
     buildTypes {
         release {
-            // Temporarily disable R8/minify to speed up builds during development
             isMinifyEnabled = false
             isShrinkResources = false
-            // ProGuard files commented out for now
-            // proguardFiles(
-            //     getDefaultProguardFile("proguard-android-optimize.txt"),
-            //     "proguard-rules.pro"
-            // )
         }
         debug {
             isMinifyEnabled = false
@@ -47,9 +44,6 @@ android {
     buildFeatures {
         compose = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -57,9 +51,9 @@ android {
     }
     lint {
         abortOnError = false
-        checkReleaseBuilds = false // Don't run lint on release builds
-        checkDependencies = false // Skip checking dependencies
-        ignoreWarnings = true // Treat warnings as non-fatal
+        checkReleaseBuilds = false
+        checkDependencies = false
+        ignoreWarnings = true
         baseline = file("lint-baseline.xml")
     }
 }
@@ -67,6 +61,11 @@ android {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     
+    // Hilt
+    implementation(libs.hilt.android)
+    implementation(libs.androidx.hilt.navigation.compose)
+    ksp(libs.hilt.compiler)
+
     // Room components
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
@@ -76,37 +75,39 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation(libs.androidx.appcompat)
 
     // Compose UI
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation("androidx.compose.material:material-icons-core:1.6.2")
-    implementation("androidx.compose.material:material-icons-extended:1.6.2")
-    implementation("com.google.code.gson:gson:2.10.1")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.gson)
     implementation(libs.kizitonwose.calendar.compose)
-    
+
+    // Navigation 3
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
     // Lifecycle components
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-    implementation("androidx.compose.runtime:runtime-livedata:1.6.7")
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.compose.runtime.livedata)
 
     // Performance improvements
-    implementation("androidx.core:core-splashscreen:1.0.1")
-    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
-    implementation("androidx.paging:paging-runtime-ktx:3.2.1")
-    implementation("androidx.paging:paging-compose:3.2.1")
-    
+    implementation(libs.androidx.splashscreen)
+    implementation(libs.androidx.profileinstaller)
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
+
     // Background processing
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation(libs.androidx.work.runtime)
 
     // Image handling
-    implementation("io.coil-kt:coil-compose:2.5.0")
-    implementation("com.google.accompanist:accompanist-permissions:0.32.0")
-    // UPI Payment integration temporarily disabled - will be added back later
+    implementation(libs.coil.compose)
 
     // CameraX and MLKit
     implementation(libs.androidx.camera.core)
@@ -116,9 +117,12 @@ dependencies {
     implementation(libs.google.mlkit.barcode.scanning)
     implementation(libs.play.services.mlkit.barcode.scanning)
 
-    // Glance for Compose-based App Widgets (widgets with better interactivity)
-    implementation("androidx.glance:glance-appwidget:1.0.0")
-    implementation("androidx.glance:glance-material3:1.0.0")
+    // Glance for Compose-based App Widgets
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+
+    // Reorderable standard library for Compose Drag and Drop
+    implementation("sh.calvin.reorderable:reorderable:2.4.0")
 
     // Testing
     testImplementation(libs.junit)
@@ -126,11 +130,13 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
-    
+
     // Debug implementations
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-    
+
     // Memory leak detection
-    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.10")
+    debugImplementation(libs.leakcanary)
+    // Accompanist Permissions
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 }

@@ -1,5 +1,7 @@
 package com.example.monday
-
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.CalculationRecord
+import com.example.monday.data.models.RecordItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,12 +31,13 @@ import java.util.*
 fun EditRecordScreen(
     recordId: Int,
     todoViewModel: TodoViewModel,
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel,
     onNavigateBack: () -> Unit,
     onSaveComplete: () -> Unit
 ) {
     // Fetch the record to edit
     val recordFlow = remember(recordId) {
-        todoViewModel.getCalculationRecordById(recordId)
+        statsViewModel.getCalculationRecordById(recordId)
     }
     val recordState by recordFlow.collectAsState(initial = null)
     
@@ -149,7 +152,7 @@ fun EditRecordScreen(
                             onEditClick = { itemToEditIndex = index },
                             onDeleteClick = {
                                 scope.launch {
-                                    val updatedRecord = todoViewModel.removeRecordItem(editedRecord!!, index)
+                                    val updatedRecord = statsViewModel.removeRecordItem(editedRecord!!, index)
                                     editedRecord = updatedRecord
                                 }
                             }
@@ -166,7 +169,7 @@ fun EditRecordScreen(
                     onSave = { description, price, quantity ->
                         scope.launch {
                             // Add new item to the record
-                            val updatedRecord = todoViewModel.addRecordItem(
+                            val updatedRecord = statsViewModel.addRecordItem(
                                 editedRecord!!, 
                                 description, 
                                 price,
@@ -188,7 +191,7 @@ fun EditRecordScreen(
                     onSave = { description, price, quantity ->
                         scope.launch {
                             // Update the item in the record
-                            val updatedRecord = todoViewModel.updateRecordItem(
+                            val updatedRecord = statsViewModel.updateRecordItem(
                                 editedRecord!!, 
                                 index, 
                                 description, 
@@ -212,7 +215,7 @@ fun EditRecordScreen(
                         TextButton(
                             onClick = {
                                 scope.launch {
-                                    todoViewModel.updateCalculationRecord(editedRecord!!)
+                                    statsViewModel.updateCalculationRecord(editedRecord!!)
                                     showConfirmSaveDialog = false
                                     onSaveComplete()
                                 }
@@ -268,7 +271,7 @@ fun EditableRecordItemRow(
                     item.quantity?.let {
                         if (it.isNotBlank()) {
                             Text(
-                                text = " · $it",
+                                text = " Â· $it",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -470,3 +473,4 @@ fun RecordItemEditDialog(
         }
     )
 }
+

@@ -1,4 +1,4 @@
-package com.example.monday
+﻿package com.example.monday
 
 import android.net.Uri
 import android.widget.Toast
@@ -194,7 +194,7 @@ fun ImageViewerDialog(
                 
                 // Bottom instruction
                 Text(
-                    text = "Swipe to view more • Tap to zoom",
+                    text = "Swipe to view more â€¢ Tap to zoom",
                     color = Color.White,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)

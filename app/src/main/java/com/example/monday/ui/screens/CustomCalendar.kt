@@ -1,4 +1,5 @@
 package com.example.monday.ui.screens
+import com.example.monday.data.models.CalculationRecord
 
 import android.util.Log
 import androidx.compose.foundation.background
@@ -24,7 +25,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.monday.TodoViewModel
-import com.example.monday.CalculationRecord
 import kotlinx.coroutines.flow.collect
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -39,6 +39,7 @@ fun CustomCalendarView(
     onDateSelected: (LocalDate) -> Unit,
     selectedDate: LocalDate,
     todoViewModel: TodoViewModel, // To fetch expenses
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel, // To fetch totals
     onMonthChanged: (YearMonth) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -51,9 +52,7 @@ fun CustomCalendarView(
     
     LaunchedEffect(currentCalendarMonth) {
         try {
-            Log.d("CalendarDebug", "Fetching master records for month: $currentCalendarMonth")
-            val totals = todoViewModel.getMasterRecordTotalsForMonth(currentCalendarMonth)
-            Log.d("CalendarDebug", "Received ${totals.size} totals: ${totals.entries.joinToString { "${it.key}=${it.value}" }}")
+            val totals = statsViewModel.getMasterRecordTotalsForMonth(currentCalendarMonth)
             masterRecordTotals = totals
         } catch (e: Exception) {
             Log.e("CalendarDebug", "Error fetching master totals", e)
@@ -154,7 +153,6 @@ fun DayCell(
     
     if (isImportantDate) {  
         // For debugging, log detailed info about important dates
-        Log.d("CalendarCellFix", "Rendering cell for ${date} with masterTotal: $masterTotal")
     }
 
     Box(
@@ -186,7 +184,6 @@ fun DayCell(
                 )
                 
                 if (isImportantDate) {
-                    Log.d("CalendarCellFix", "Displaying amount: $formattedAmount for ${date}")
                 }
             }
         }
@@ -207,3 +204,4 @@ fun getDaysInMonthGrid(yearMonth: YearMonth): List<LocalDate?> {
     }
     return daysList
 } 
+

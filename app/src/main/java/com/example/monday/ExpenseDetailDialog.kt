@@ -1,4 +1,6 @@
-package com.example.monday
+﻿package com.example.monday
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -53,7 +55,7 @@ fun ExpenseDetailDialog(
         val allCategories = data.primaryCategories + data.secondaryCategories + data.tertiaryCategories
         val categoryName = when {
             data.title.isNotEmpty() -> data.title
-            data.isIntersection -> allCategories.joinToString(" ∩ ")
+            data.isIntersection -> allCategories.joinToString(" âˆ© ")
             else -> {
                 data.tertiaryCategories.firstOrNull() ?: 
                 data.secondaryCategories.firstOrNull() ?: 
@@ -259,7 +261,7 @@ private fun DetailRow(
                 fontSize = 12.sp
             )
         } else if (data.isIntersection) {
-            // For intersection case - reorder categories (tertiary first, then ∩, then secondary/primary)
+            // For intersection case - reorder categories (tertiary first, then âˆ©, then secondary/primary)
             val textContent = buildAnnotatedString {
                 // First show tertiary categories in normal color
                 if (data.tertiaryCategories.isNotEmpty()) {
@@ -272,7 +274,7 @@ private fun DetailRow(
                 if ((data.tertiaryCategories.isNotEmpty() && (data.secondaryCategories.isNotEmpty() || data.primaryCategories.isNotEmpty())) ||
                     (data.secondaryCategories.isNotEmpty() && data.primaryCategories.isNotEmpty())) {
                     withStyle(SpanStyle(color = Color.Gray, fontWeight = FontWeight.Normal, fontSize = 11.sp)) {
-                        append(" ∩ ")
+                        append(" âˆ© ")
                     }
                 }
                 
@@ -286,7 +288,7 @@ private fun DetailRow(
                 // Show another intersection symbol if needed
                 if (data.secondaryCategories.isNotEmpty() && data.primaryCategories.isNotEmpty()) {
                     withStyle(SpanStyle(color = Color.Gray, fontWeight = FontWeight.Normal, fontSize = 10.sp)) {
-                        append(" ∩ ")
+                        append(" âˆ© ")
                     }
                 }
                 

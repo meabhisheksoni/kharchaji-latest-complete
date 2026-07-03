@@ -1,4 +1,9 @@
 package com.example.monday
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.CalculationRecord
+import com.example.monday.data.models.RecordItem
+import com.example.monday.data.models.TodoItem
+import com.example.monday.viewmodels.MainViewModel
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.* 
@@ -33,16 +38,17 @@ import kotlinx.coroutines.flow.flowOf
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalculationRecordsScreen(
-    todoViewModel: TodoViewModel,
+    todoViewModel: TodoViewModel, mainViewModel: MainViewModel,
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel,
     displayDate: LocalDate?,
     onNavigateBack: () -> Unit,
     onRecordClick: (Int) -> Unit, // Callback for when a record is clicked, passing its ID
     onEditRecordClick: (Int) -> Unit = {} // New callback for edit action
 ) {
     // Memoize the Flow to prevent re-creation on every recomposition
-    val recordsFlow = remember(displayDate, todoViewModel) {
+    val recordsFlow = remember(displayDate, statsViewModel) {
         if (displayDate != null) {
-            todoViewModel.getCalculationRecordsForDate(displayDate)
+            statsViewModel.getCalculationRecordsForDate(displayDate)
         } else {
             flowOf(emptyList<CalculationRecord>()) // Use flowOf for an empty list if date is null
         }
@@ -97,7 +103,7 @@ fun CalculationRecordsScreen(
                         confirmValueChange = { dismissValue ->
                             when (dismissValue) {
                                 SwipeToDismissBoxValue.EndToStart -> { // Swiped from right to left (delete)
-                                    todoViewModel.deleteCalculationRecordById(record.id)
+                                    statsViewModel.deleteCalculationRecordById(record.id)
                                     true // Indicate the dismiss action is confirmed
                                 }
                                 SwipeToDismissBoxValue.StartToEnd -> { // Swiped from left to right (edit)
@@ -117,7 +123,7 @@ fun CalculationRecordsScreen(
                         backgroundContent = {
                             val color = when (dismissState.dismissDirection) {
                                 SwipeToDismissBoxValue.EndToStart -> Color.Red.copy(alpha = 0.7f)
-                                SwipeToDismissBoxValue.StartToEnd -> Color.Blue.copy(alpha = 0.7f)
+                                SwipeToDismissBoxValue.StartToEnd -> Color(0xFFEAEAEA)
                                 else -> Color.Transparent
                             }
                             
@@ -135,7 +141,7 @@ fun CalculationRecordsScreen(
                                     SwipeToDismissBoxValue.StartToEnd -> Icon(
                                         Icons.Default.Edit,
                                         contentDescription = "Edit",
-                                        tint = Color.White
+                                        tint = Color.Black
                                     )
                                     SwipeToDismissBoxValue.EndToStart -> Icon(
                                         Icons.Default.Delete,
@@ -201,13 +207,14 @@ fun CalculationRecordItem(
 @Composable
 fun CalculationRecordDetailScreen(
     recordId: Int,
-    todoViewModel: TodoViewModel,
+    todoViewModel: TodoViewModel, mainViewModel: MainViewModel,
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel,
     onNavigateBack: () -> Unit,
     onSetMemoAndReturnToExpenses: () -> Unit
 ) {
     // Memoize the Flow to prevent re-creation on every recomposition
-    val recordFlow = remember(recordId, todoViewModel) {
-        todoViewModel.getCalculationRecordById(recordId)
+    val recordFlow = remember(recordId, statsViewModel) {
+        statsViewModel.getCalculationRecordById(recordId)
     }
     val recordState by recordFlow.collectAsState(initial = null)
 
@@ -320,7 +327,7 @@ fun CalculationRecordDetailScreen(
                         if (!record.isMasterSave) {
                             Button(
                                 onClick = { 
-                                    todoViewModel.loadRecordItemsAsCurrentExpenses(record.items, record.recordDate.toLocalDate())
+                                    mainViewModel.loadRecordItemsAsCurrentExpenses(record.items, record.recordDate.toLocalDate())
                                     onSetMemoAndReturnToExpenses()
                                 },
                                 modifier = Modifier.weight(1f).padding(end = 4.dp)
@@ -330,7 +337,7 @@ fun CalculationRecordDetailScreen(
                         } else {
                             Button(
                                 onClick = { 
-                                    todoViewModel.loadRecordItemsAsCurrentExpenses(record.items, record.recordDate.toLocalDate())
+                                    mainViewModel.loadRecordItemsAsCurrentExpenses(record.items, record.recordDate.toLocalDate())
                                     onSetMemoAndReturnToExpenses()
                                 },
                                 modifier = Modifier.weight(1f).padding(end = 4.dp),
@@ -345,7 +352,7 @@ fun CalculationRecordDetailScreen(
                         // New Clear and Set button
                         Button(
                             onClick = { 
-                                todoViewModel.clearAndSetRecordItems(record.items, record.recordDate.toLocalDate())
+                                mainViewModel.clearAndSetRecordItems(record.items, record.recordDate.toLocalDate())
                                 onSetMemoAndReturnToExpenses()
                             },
                             modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
@@ -358,7 +365,7 @@ fun CalculationRecordDetailScreen(
                         
                         Button(
                             onClick = { 
-                                todoViewModel.deleteCalculationRecordById(record.id)
+                                statsViewModel.deleteCalculationRecordById(record.id)
                                 onNavigateBack()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -446,3 +453,4 @@ fun MasterRecordListItem(index: Int, item: RecordItem) {
         HorizontalDivider()
     }
 }
+

@@ -1,5 +1,6 @@
-package com.example.monday
-
+﻿package com.example.monday
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -91,7 +92,7 @@ fun CategoryExpenseDetailDialog(
                 ) {
                     Text(
                         text = if (isIntersection) {
-                            categories.joinToString(" ∩ ")
+                            categories.joinToString(" âˆ© ")
                         } else {
                             categoryName
                         },

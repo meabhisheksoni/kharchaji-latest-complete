@@ -1,7 +1,8 @@
-package com.example.monday.widget
-
-import android.os.Bundle
-import android.widget.Toast
+﻿package com.example.monday.widget
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
+import com.example.monday.data.local.TodoDao
+import com.example.monday.data.local.AppDatabase
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
@@ -25,8 +26,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.monday.AppDatabase
-import com.example.monday.TodoItem
+import android.os.Bundle
+import android.widget.Toast
 import com.example.monday.ui.theme.KharchajiTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -193,7 +194,7 @@ fun ExpenseWidgetContent(
                     modifier = Modifier.size(56.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4CE0B3)
+                        containerColor = Color(0xFF6F6F6F)
                     )
                 ) {
                     Icon(
@@ -277,3 +278,6 @@ fun ExpenseWidgetContent(
         }
     }
 }
+
+
+

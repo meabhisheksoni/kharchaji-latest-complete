@@ -35,7 +35,8 @@ val Warning = Color(0xFFFFA726)
 val Info = Color(0xFF2196F3)
 
 // New Palette (Inspired by Image)
-val NewPrimary = Color(0xFF4A8F8F)
+val NewPrimary = Color(0xFF6F6F6F)
+val NewPrimaryContainer = Color(0xFFE0E0E0) // Lighter gray for containers
 val NewPrimaryDark = Color(0xFF3A7A7A) // For dark theme primary or variants
 val NewBackgroundDark = Color(0xFF303030) // Dark overall background
 val NewSurfaceLight = Color(0xFFFAFAFA)   // Light card surfaces

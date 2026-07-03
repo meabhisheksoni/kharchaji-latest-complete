@@ -1,4 +1,4 @@
-package com.example.monday.ui.theme
+﻿package com.example.monday.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -19,15 +19,15 @@ import androidx.core.view.WindowCompat
 private val LightColorScheme = lightColorScheme(
     primary = NewPrimary,
     onPrimary = NewOnPrimary,
-    primaryContainer = Color(0xFFD0E7E7),
+    primaryContainer = NewPrimaryContainer,
     secondary = NewPrimary,
     onSecondary = NewOnPrimary,
-    secondaryContainer = Color(0xFFB8D9D9),
-    background = Color(0xFFFFFFFF),
-    surface = Color(0xFFFFFFFF),
+    secondaryContainer = NewPrimaryContainer,
+    background = Color(0xFFE1E1E1), // Exact #E1E1E1
+    surface = Color(0xFFE1E1E1),    // Exact #E1E1E1 — no variance
     onBackground = NewOnSurfaceLight,
     onSurface = NewOnSurfaceLight,
-    surfaceVariant = Color(0xFFEEF7F7),
+    surfaceVariant = Color(0xFFE1E1E1), // Exact #E1E1E1 — no variance
     onSurfaceVariant = NewOnSurfaceLightSecondary,
     error = Error
 )
@@ -51,7 +51,7 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun KharchajiTheme(
     darkTheme: Boolean = false,
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false, // Disabled: use our premium hand-crafted palette instead of system wallpaper colors
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

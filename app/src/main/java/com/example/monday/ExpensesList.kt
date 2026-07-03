@@ -1,5 +1,6 @@
 package com.example.monday
-
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -39,7 +40,7 @@ fun DashedLine(color: Color, dashLength: Float, gapLength: Float, modifier: Modi
 fun ExpensesList(todoItems: List<TodoItem>, totalSum: Double) {
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .background(Color.White)
             .padding(16.dp)
     ) {
@@ -49,8 +50,13 @@ fun ExpensesList(todoItems: List<TodoItem>, totalSum: Double) {
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        LazyColumn {
-            itemsIndexed(todoItems) { index, item ->
+        // weight(1f) gives the LazyColumn bounded height within this Column,
+        // preventing the "infinity maximum height constraints" crash
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            itemsIndexed(
+                items = todoItems,
+                key = { _, item -> item.id } // Stable key prevents O(N) recomposition
+            ) { index, item ->
                 val (name, quantity, price) = parseItemText(item.text)
                 Column {
                     Row(

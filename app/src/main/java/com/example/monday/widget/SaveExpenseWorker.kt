@@ -1,11 +1,15 @@
 package com.example.monday.widget
 
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
+import com.example.monday.data.local.TodoDao
+import com.example.monday.data.local.AppDatabase
+
 import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.example.monday.AppDatabase
-import com.example.monday.TodoItem
+import com.example.monday.MasterSaveHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -26,8 +30,6 @@ class SaveExpenseWorker(
             val priceStr = inputData.getString("price") ?: "0"
             val qtyStr = inputData.getString("qty") ?: ""
             val unit = inputData.getString("unit") ?: ""
-            
-            Log.d(TAG, "Starting save: item=$itemName, price=$priceStr, qty=$qtyStr, unit=$unit")
             
             // Parse and validate
             val price = priceStr.toDoubleOrNull() ?: 0.0
@@ -50,12 +52,27 @@ class SaveExpenseWorker(
                         "g" -> {
                             if (qty >= 1000) "${(qty / 1000)}kg" else "${qty.toInt()}g"
                         }
+                        "ml" -> {
+                            if (qty >= 1000) "${(qty / 1000)}L" else "${qty.toInt()}ml"
+                        }
+                        "L" -> {
+                            if (qty >= 1) "${qty.toInt()}L" else "${(qty * 1000).toInt()}ml"
+                        }
                         "items" -> {
                             if (qty == 1.0) "1 item" else "${qty.toInt()} items"
                         }
                         else -> "$qty$unit"
                     }
                     "$itemName ($quantityDisplay) - ₹$formattedPrice"
+                } else {
+                    "$itemName - ₹$formattedPrice"
+                }
+            } else if (qtyStr.isNotBlank()) {
+                // Qty without unit â€” save as items/count
+                val qty = qtyStr.toDoubleOrNull() ?: 0.0
+                if (qty > 0) {
+                    val countDisplay = if (qty == 1.0) "1 item" else "${qty.toInt()} items"
+                    "$itemName ($countDisplay) - ₹$formattedPrice"
                 } else {
                     "$itemName - ₹$formattedPrice"
                 }
@@ -74,15 +91,22 @@ class SaveExpenseWorker(
                 isDone = false
             )
             
-            Log.d(TAG, "Creating TodoItem: $itemText")
-            
             // Insert into database
             val database = AppDatabase.getDatabase(applicationContext)
             val insertedId = database.todoDao().insertAndGetId(todoItem)
-            
-            Log.d(TAG, "Successfully saved expense with ID: $insertedId")
-            Log.d(TAG, "Item text: $itemText")
             Log.d(TAG, "Timestamp: $timestamp (${currentDate})")
+            
+            // â”€â”€ Auto Master Save Integration â”€â”€
+            val prefManager = com.example.monday.managers.PreferenceManager.from(applicationContext)
+            val autoMasterSave = prefManager.getPaymentMonitorSetting("auto_master_save") ?: false
+            if (autoMasterSave) {
+                // Background worker, so we can just call it synchronously here since we are in doWork()
+                // Wait, it's a completely suspendable function. Let's make sure doWork runs context properly.
+                // We're inside CoroutineWorker doWork(), which is suspend.
+                val itemWithId = todoItem.copy(id = insertedId.toInt())
+                MasterSaveHelper.appendToMasterAsync(applicationContext, itemWithId)
+            }
+            // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             
             Result.success()
             

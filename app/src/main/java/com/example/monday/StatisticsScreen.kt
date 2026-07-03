@@ -1,4 +1,4 @@
-package com.example.monday
+﻿package com.example.monday
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.ripple.rememberRipple
+import androidx.compose.material3.ripple
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,20 +44,22 @@ fun StatisticsScreen(
     onNavigateToAllExpenses: () -> Unit = {},
     onNavigateToFindAndReplace: () -> Unit = {},
     onNavigateToMonthlyReport: () -> Unit = {},
-    onNavigateToCategories: () -> Unit = {}
+    onNavigateToCategories: () -> Unit = {},
+    onNavigateToTrends: () -> Unit = {}
 ) {
     // Use coroutineScope for handling clicks
     val coroutineScope = rememberCoroutineScope()
             
-    // Define options list without remember
-            val statOptions = listOf(
-                StatOption(
-                    title = "All Expenses",
+    // StatOption list uses @Composable MaterialTheme colors, so it cannot be wrapped in remember {}.
+    // This is safe because Icon objects are cached singletons and Colors are value types (no GC pressure).
+    val statOptions = listOf(
+        StatOption(
+            title = "All Expenses",
             icon = Icons.AutoMirrored.Outlined.List,
-                    description = "View all your expenses in one place",
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    onClick = onNavigateToAllExpenses
-                ),
+            description = "View all your expenses in one place",
+            color = MaterialTheme.colorScheme.primaryContainer,
+            onClick = onNavigateToAllExpenses
+        ),
         StatOption(
             title = "Find & Replace",
             icon = Icons.Outlined.FindReplace,
@@ -65,63 +67,63 @@ fun StatisticsScreen(
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
             onClick = onNavigateToFindAndReplace
         ),
-                StatOption(
-                    title = "Monthly Report",
-                    icon = Icons.Outlined.CalendarMonth,
-                    description = "View expenses by month",
-                    color = MaterialTheme.colorScheme.secondaryContainer,
+        StatOption(
+            title = "Monthly Report",
+            icon = Icons.Outlined.CalendarMonth,
+            description = "View expenses by month",
+            color = MaterialTheme.colorScheme.secondaryContainer,
             onClick = onNavigateToMonthlyReport
-                ),
-                StatOption(
-                    title = "Categories",
-                    icon = Icons.Outlined.Category,
-                    description = "Expenses by category",
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    onClick = onNavigateToCategories
-                ),
-                StatOption(
-                    title = "Trends",
+        ),
+        StatOption(
+            title = "Categories",
+            icon = Icons.Outlined.Category,
+            description = "Expenses by category",
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+            onClick = onNavigateToCategories
+        ),
+        StatOption(
+            title = "Trends",
             icon = Icons.AutoMirrored.Outlined.TrendingUp,
-                    description = "Spending trends over time",
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    onClick = { /* TODO: Implement trends */ }
-                ),
-                StatOption(
-                    title = "Budget",
-                    icon = Icons.Outlined.AccountBalance,
-                    description = "Budget tracking",
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    onClick = { /* TODO: Implement budget tracking */ }
-                ),
-                StatOption(
-                    title = "Insights",
-                    icon = Icons.Outlined.Insights,
-                    description = "Smart expense insights",
-                    color = MaterialTheme.colorScheme.inversePrimary,
-                    onClick = { /* TODO: Implement insights */ }
-                ),
-                StatOption(
-                    title = "Export",
-                    icon = Icons.Outlined.FileDownload,
-                    description = "Export expense data",
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    onClick = { /* TODO: Implement export */ }
-                ),
-                StatOption(
-                    title = "Charts",
-                    icon = Icons.Outlined.PieChart,
-                    description = "Visual expense charts",
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                    onClick = { /* TODO: Implement charts */ }
-                ),
-                StatOption(
-                    title = "Settings",
-                    icon = Icons.Outlined.Settings,
-                    description = "Statistics settings",
-                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
-                    onClick = { /* TODO: Implement statistics settings */ }
-                )
-            )
+            description = "Spending trends over time",
+            color = MaterialTheme.colorScheme.errorContainer,
+            onClick = onNavigateToTrends
+        ),
+        StatOption(
+            title = "Budget",
+            icon = Icons.Outlined.AccountBalance,
+            description = "Budget tracking",
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            onClick = { /* TODO: Implement budget tracking */ }
+        ),
+        StatOption(
+            title = "Insights",
+            icon = Icons.Outlined.Insights,
+            description = "Smart expense insights",
+            color = MaterialTheme.colorScheme.inversePrimary,
+            onClick = { /* TODO: Implement insights */ }
+        ),
+        StatOption(
+            title = "Export",
+            icon = Icons.Outlined.FileDownload,
+            description = "Export expense data",
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            onClick = { /* TODO: Implement export */ }
+        ),
+        StatOption(
+            title = "Charts",
+            icon = Icons.Outlined.PieChart,
+            description = "Visual expense charts",
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+            onClick = { /* TODO: Implement charts */ }
+        ),
+        StatOption(
+            title = "Settings",
+            icon = Icons.Outlined.Settings,
+            description = "Statistics settings",
+            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
+            onClick = { /* TODO: Implement statistics settings */ }
+        )
+    )
             
     Scaffold(
         topBar = {
@@ -156,12 +158,7 @@ fun StatisticsScreen(
                     ) { option ->
                         OptimizedStatCard(
                             option = option,
-                            onCardClick = {
-                                // Use coroutineScope to handle click events without blocking UI
-                                coroutineScope.launch {
-                                    option.onClick()
-                }
-            }
+                            onCardClick = option.onClick
                         )
                     }
                 }
@@ -181,7 +178,7 @@ fun OptimizedStatCard(option: StatOption, onCardClick: () -> Unit) {
             // Optimized clickable with custom ripple effect
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = rememberRipple(bounded = true, color = MaterialTheme.colorScheme.primary),
+                indication = ripple(color = MaterialTheme.colorScheme.primary),
                 role = Role.Button,
                 onClick = onCardClick
             ),

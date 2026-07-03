@@ -28,8 +28,10 @@ class SplashActivity : ComponentActivity() {
         // Install the splash screen before calling setContentView
         val splashScreen = installSplashScreen()
         
-        // Keep the splash screen on-screen until we're done loading
-        splashScreen.setKeepOnScreenCondition { true }
+        // Use a mutable flag — setting keepOnScreenCondition to { true } permanently
+        // blocks the splash, preventing the Compose content from ever rendering.
+        var isLoading = true
+        splashScreen.setKeepOnScreenCondition { isLoading }
         
         super.onCreate(savedInstanceState)
         
@@ -40,6 +42,9 @@ class SplashActivity : ComponentActivity() {
                     startActivity(Intent(this, MainActivity::class.java))
                     // Close this activity so it's not in the back stack
                     finish()
+                }, onLoadingComplete = {
+                    // Dismiss the system splash screen
+                    isLoading = false
                 })
             }
         }
@@ -47,17 +52,20 @@ class SplashActivity : ComponentActivity() {
 }
 
 @Composable
-fun SplashScreen(onTimeout: () -> Unit) {
+fun SplashScreen(onTimeout: () -> Unit, onLoadingComplete: () -> Unit = {}) {
     // Launch a coroutine to handle the delay and navigation
     LaunchedEffect(Unit) {
         try {
-            // Simulate loading with a delay
+            // Signal that loading is done — this dismisses the system splash screen
+            onLoadingComplete()
+            // Brief pause so the user sees the custom splash content
             delay(1000)
             // Navigate to next screen
             onTimeout()
         } catch (e: Exception) {
-            // Log any errors and still navigate to prevent app from hanging
+            // Fail-safe: always navigate to prevent app from hanging indefinitely
             android.util.Log.e("KharchaJi", "Error in splash screen coroutine", e)
+            onLoadingComplete()
             onTimeout()
         }
     }

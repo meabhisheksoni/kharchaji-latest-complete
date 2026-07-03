@@ -1,5 +1,6 @@
 package com.example.monday
-
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,13 +27,13 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FindAndReplaceScreen(
-    todoViewModel: TodoViewModel,
+    todoViewModel: TodoViewModel, mainViewModel: com.example.monday.viewmodels.MainViewModel,
     onNavigateBack: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -44,7 +45,7 @@ fun FindAndReplaceScreen(
     
     // Get all expenses from the database
     val allExpensesFlow = remember { 
-        todoViewModel.todoItems.map { items ->
+        mainViewModel.todoItems.map { items ->
             items.map { item ->
                 val (description, quantity, _) = parseItemText(item.text)
                 val price = parsePrice(item.text)
@@ -69,7 +70,7 @@ fun FindAndReplaceScreen(
     
     // Collect the flow
     LaunchedEffect(allExpensesFlow) {
-        allExpensesFlow.collect { expenses ->
+        allExpensesFlow.collectLatest { expenses ->
             allExpenses = expenses
         }
     }
@@ -193,7 +194,7 @@ fun FindAndReplaceScreen(
                         
                         // Update all items in the database
                         replacedItems.forEach { item ->
-                            todoViewModel.updateItem(item)
+                            mainViewModel.updateItem(item)
                         }
                         
                         snackbarMessage = "Replaced ${replacedItems.size} occurrences"

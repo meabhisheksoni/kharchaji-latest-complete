@@ -147,7 +147,7 @@ class ExpenseGlanceWidget : GlanceAppWidget() {
                 Box(
                     modifier = GlanceModifier
                         .size(56.dp)
-                        .background(androidx.glance.unit.ColorProvider(androidx.compose.ui.graphics.Color(0xFF4CE0B3)))
+                        .background(androidx.glance.unit.ColorProvider(androidx.compose.ui.graphics.Color(0xFF6F6F6F)))
                         .clickable(actionRunCallback<SubmitExpenseAction>()),
                     contentAlignment = Alignment.Center
                 ) {
@@ -322,7 +322,6 @@ val UnitParam = ActionParameters.Key<String>("unit")
 // Action Callbacks
 class EditItemNameAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        Log.d("ExpenseGlanceWidget", "EditItemNameAction triggered")
         val intent = android.content.Intent(context, WidgetInputActivity::class.java).apply {
             putExtra("field", "item_name")
             putExtra("glance_id", glanceId.toString())
@@ -334,7 +333,6 @@ class EditItemNameAction : ActionCallback {
 
 class EditPriceAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        Log.d("ExpenseGlanceWidget", "EditPriceAction triggered")
         val intent = android.content.Intent(context, WidgetInputActivity::class.java).apply {
             putExtra("field", "price")
             putExtra("glance_id", glanceId.toString())
@@ -346,7 +344,6 @@ class EditPriceAction : ActionCallback {
 
 class EditCustomQuantityAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        Log.d("ExpenseGlanceWidget", "EditCustomQuantityAction triggered")
         val intent = android.content.Intent(context, WidgetInputActivity::class.java).apply {
             putExtra("field", "custom_quantity")
             putExtra("glance_id", glanceId.toString())
@@ -359,7 +356,6 @@ class EditCustomQuantityAction : ActionCallback {
 class SelectQuantityAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val quantity = parameters[QuantityParam] ?: return
-        Log.d("ExpenseGlanceWidget", "SelectQuantityAction: $quantity")
         
         // Read current state from SharedPreferences
         val sharedPrefs = context.getSharedPreferences("glance_prefs_${glanceId}", Context.MODE_PRIVATE)
@@ -374,8 +370,6 @@ class SelectQuantityAction : ActionCallback {
             // Select - set new quantity
             quantity to "g"
         }
-        
-        Log.d("ExpenseGlanceWidget", "Toggle: current=$currentQty$currentUnit, new=$newQty$newUnit")
         
         // Update Glance state
         updateAppWidgetState(context, glanceId) { prefs ->
@@ -397,7 +391,6 @@ class SelectQuantityAction : ActionCallback {
 class SelectUnitAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val unit = parameters[UnitParam] ?: return
-        Log.d("ExpenseGlanceWidget", "SelectUnitAction: $unit")
         
         // Read current state from SharedPreferences
         val sharedPrefs = context.getSharedPreferences("glance_prefs_${glanceId}", Context.MODE_PRIVATE)
@@ -409,8 +402,6 @@ class SelectUnitAction : ActionCallback {
         } else {
             unit
         }
-        
-        Log.d("ExpenseGlanceWidget", "Toggle unit: current=$currentUnit, new=$newUnit")
         
         // Update Glance state
         updateAppWidgetState(context, glanceId) { prefs ->
@@ -429,7 +420,6 @@ class SelectUnitAction : ActionCallback {
 
 class SubmitExpenseAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        Log.d("ExpenseGlanceWidget", "SubmitExpenseAction triggered")
         
         // Read current widget state from SharedPreferences
         val sharedPrefs = context.getSharedPreferences("glance_prefs_${glanceId}", Context.MODE_PRIVATE)
@@ -437,8 +427,6 @@ class SubmitExpenseAction : ActionCallback {
         val price = sharedPrefs.getString("widget_price", "0") ?: "0"
         val qty = sharedPrefs.getString("widget_qty", "") ?: ""
         val unit = sharedPrefs.getString("widget_unit", "") ?: ""
-        
-        Log.d("ExpenseGlanceWidget", "Submit: item=$itemName, price=$price, qty=$qty, unit=$unit")
         
         // Validate
         if (price.toDoubleOrNull() == null || price.toDouble() <= 0) {

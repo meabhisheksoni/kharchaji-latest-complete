@@ -1,5 +1,8 @@
 package com.example.monday
 
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
+import com.example.monday.viewmodels.MainViewModel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,15 +17,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.map
-import com.example.monday.intelligentlyCategorize
-import com.example.monday.generateCategoryColors
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.interaction.MutableInteractionSource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryFilterScreen(
-    todoViewModel: TodoViewModel,
+    todoViewModel: TodoViewModel, mainViewModel: MainViewModel,
     onNavigateBack: () -> Unit,
     onApplyFilters: (List<String>) -> Unit,
     initialSelectedCategories: List<String>
@@ -34,7 +35,7 @@ fun CategoryFilterScreen(
     
     // Also get categories from TodoItems to ensure we include any categories that might be in use
     // but not in the settings (for backward compatibility)
-    val itemCategories by todoViewModel.todoItems.map { items ->
+    val itemCategories by mainViewModel.todoItems.map { items ->
         items.flatMap { parseCategoryInfo(it.text).second }.toSet()
     }.collectAsState(initial = emptySet())
     

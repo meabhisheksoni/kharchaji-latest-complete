@@ -1,7 +1,7 @@
-package com.example.monday.domain
+﻿package com.example.monday.domain
+import com.example.monday.data.models.TodoItem
+import com.example.monday.data.models.CalculationRecord
 
-import com.example.monday.CalculationRecord
-import com.example.monday.TodoItem
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
@@ -41,6 +41,7 @@ interface ITodoRepository {
     suspend fun deleteItems(items: List<TodoItem>)
     suspend fun getAllCalculationRecordsForExport(): List<CalculationRecord>
     suspend fun clearAndInsertAllData(todoItems: List<TodoItem>, calculationRecords: List<CalculationRecord>)
+    suspend fun mergeAllData(todoItems: List<TodoItem>, calculationRecords: List<CalculationRecord>)
     suspend fun getAllItemsForDateRange(startOfDayMillis: Long, endOfDayMillis: Long): List<TodoItem>
     suspend fun getAllCalculationRecordsForDateRangeDirect(startOfDayMillis: Long, endOfDayMillis: Long): List<CalculationRecord>
     suspend fun getMasterSaveRecordsForDateRange(startOfDayMillis: Long, endOfDayMillis: Long): List<CalculationRecord>
@@ -52,3 +53,5 @@ interface ITodoRepository {
     suspend fun updateCalculationRecords(records: List<CalculationRecord>)
     suspend fun getAllItemsGroupedByDate(): Map<LocalDate, List<TodoItem>>
 } 
+
+

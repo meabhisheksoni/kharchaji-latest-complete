@@ -1,18 +1,17 @@
 package com.example.monday.domain
 
 import android.util.Log
-import com.example.monday.RecordItem
-import com.example.monday.TodoItem
-import com.example.monday.TodoRepository
-import com.example.monday.todoItemToRecordItem
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.*
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.Instant
 
 /**
  * Use case for creating a master record from a list of items
  * This moves complex business logic out of the ViewModel for better separation of concerns
  */
-class CreateMasterRecordUseCase(private val repository: TodoRepository) {
+class CreateMasterRecordUseCase(private val repository: ITodoRepository) {
     
     /**
      * Create a master record from a list of items
@@ -38,16 +37,13 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
         var masterRecordCreatedOrUpdated = false
         
         // First check if we should create a regular record using our improved duplicate detection
-        Log.d("MasterSave", "Checking for existing regular records with identical items")
         
         // Get all existing non-master records for this date directly from DB
         val startOfDayMillis = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfDayMillis = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
-        val existingRegularRecords = repository.getAllCalculationRecordsForDateRangeDirect(
+        val existingRegularRecords: List<CalculationRecord> = repository.getAllCalculationRecordsForDateRangeDirect(
             startOfDayMillis, endOfDayMillis
         ).filter { !it.isMasterSave }
-        
-        Log.d("MasterSave", "Found ${existingRegularRecords.size} existing regular records for date: $date")
         
         // Check if any existing record has identical items
         val newRecordItems = recordItems.map { 
@@ -65,7 +61,6 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
             }.sorted()
             
             if (newRecordItems.size == existingItems.size && newRecordItems == existingItems) {
-                Log.d("MasterSave", "Found identical regular record #${existingRecord.id}, skipping creation")
                 duplicateFound = true
                 break
             }
@@ -73,7 +68,7 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
         
         // Create regular record only if no duplicate found
         if (!duplicateFound) {
-            val regularRecord = com.example.monday.CalculationRecord(
+            val regularRecord = CalculationRecord(
                 items = recordItems,
                 totalSum = totalSum,
                 checkedItemsCount = checkedItemsCount,
@@ -83,7 +78,6 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
             )
             repository.insertCalculationRecord(regularRecord)
             regularRecordCreated = true
-            Log.d("MasterSave", "Created new regular record")
         }
         
         // Now handle the master record
@@ -94,7 +88,6 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
         if (existingMasterRecords.isNotEmpty()) {
             // Update existing master record
             val existingMaster = existingMasterRecords.first()
-            Log.d("MasterSave", "Found existing master record #${existingMaster.id}")
             
             // Create new master items list by combining existing and new items
             val updatedMasterItems = mergeRecordItems(existingMaster.items, recordItems)
@@ -114,14 +107,12 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
                 )
                 repository.updateCalculationRecord(updatedMaster)
                 masterRecordCreatedOrUpdated = true
-                Log.d("MasterSave", "Updated existing master record with new items")
             } else {
-                Log.d("MasterSave", "No changes to master record, skipping update")
             }
             
         } else {
             // Create new master record with all items
-            val masterRecord = com.example.monday.CalculationRecord(
+            val masterRecord = CalculationRecord(
                 items = recordItems,
                 totalSum = totalSum,
                 checkedItemsCount = checkedItemsCount,
@@ -131,7 +122,6 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
             )
             repository.insertCalculationRecord(masterRecord)
             masterRecordCreatedOrUpdated = true
-            Log.d("MasterSave", "Created new master record")
         }
         
         return Pair(regularRecordCreated, masterRecordCreatedOrUpdated)
@@ -166,7 +156,6 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
                 bestMatchItem = existingItemsBySourceId[newItem.sourceItemId]
                 if (bestMatchItem != null) {
                     matchFound = true
-                    Log.d("MasterSave", "Found match by sourceItemId: ${newItem.sourceItemId} for '${newItem.description}'")
                 }
             }
             
@@ -180,7 +169,6 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
                     bestMatchItem = matchingExistingItems.firstOrNull { it !in processedExistingItems }
                     if (bestMatchItem != null) {
                         matchFound = true
-                        Log.d("MasterSave", "Found match by name: '${newItem.description}'")
                     }
                 }
             }
@@ -201,7 +189,6 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
                         if (existingNameLower.contains(newNameLower) || newNameLower.contains(existingNameLower)) {
                             bestMatchItem = existingItem
                             matchFound = true
-                            Log.d("MasterSave", "Found fuzzy match: '${existingItem.description}' ~ '${newItem.description}'")
                             break
                         }
                     }
@@ -229,7 +216,6 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
                 updatedMasterItems.add(updatedItem)
             } else {
                 // No match found, add as a new item
-                Log.d("MasterSave", "Adding new item to master record: ${newItem.description}")
                 updatedMasterItems.add(newItem)
             }
         }
@@ -237,7 +223,6 @@ class CreateMasterRecordUseCase(private val repository: TodoRepository) {
         // Add any remaining existing items that weren't matched
         val remainingItems = existingItems.filter { it !in processedExistingItems }
         if (remainingItems.isNotEmpty()) {
-            Log.d("MasterSave", "Adding ${remainingItems.size} unmatched existing items to master record")
             updatedMasterItems.addAll(remainingItems)
         }
         

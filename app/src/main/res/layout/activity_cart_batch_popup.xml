@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom"
+    android:background="@drawable/rounded_bottom_sheet_bg"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/cart_title_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Save 3 Items?"
+        android:textColor="#000000"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+        
+    <TextView
+        android:id="@+id/cart_total_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Total: ₹0"
+        android:textColor="#555555"
+        android:textSize="16sp"
+        android:layout_marginTop="4dp" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        android:fillViewport="true"
+        android:fadeScrollbars="false"
+        android:maxHeight="300dp">
+
+        <LinearLayout
+            android:id="@+id/cart_items_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+            
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_cart_cancel"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="56dp"
+            android:backgroundTint="#F0F0F0"
+            android:textColor="#FF0000"
+            android:text="Discard"
+            android:layout_marginEnd="8dp"
+            android:textAllCaps="false"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btn_cart_save"
+            android:layout_width="0dp"
+            android:layout_weight="2"
+            android:layout_height="56dp"
+            android:backgroundTint="#000000"
+            android:textColor="#FFFFFF"
+            android:text="Save Instantly"
+            android:layout_marginStart="8dp"
+            android:textAllCaps="false"
+            android:textStyle="bold" />
+            
+    </LinearLayout>
+
+</LinearLayout>

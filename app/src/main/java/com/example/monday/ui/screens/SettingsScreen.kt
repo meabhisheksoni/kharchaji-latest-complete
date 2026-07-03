@@ -4,6 +4,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -11,11 +15,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.monday.ExpenseCategory
 import com.example.monday.TodoViewModel
 import com.example.monday.ui.components.DefaultCategories
@@ -27,65 +35,98 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
-import com.example.monday.exportBackup
-import com.example.monday.importBackup
-import com.example.monday.overlay.OverlayHelper
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
+import com.example.monday.ui.overlay.OverlayHelper
+import com.example.monday.ui.screens.settings.*
+import com.example.monday.ui.modern.ModernColors
+import com.example.monday.viewmodels.SettingsViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 
+/**
+ * Settings screen — modularized into 5 categories using a square grid.
+ */
+enum class SettingsCategory(val title: String, val icon: ImageVector) {
+    DASHBOARD("Dashboard", Icons.Outlined.Dashboard),
+    BACKUP("Backup & Restore", Icons.Outlined.SettingsBackupRestore),
+    QUICK_ACCESS("Quick Access", Icons.Outlined.Bolt),
+    PAYMENT_MONITOR("Payment Monitor", Icons.Outlined.NotificationsActive),
+    CATEGORIES("Categories", Icons.Outlined.Category)
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    viewModel: TodoViewModel,
+    viewModel: TodoViewModel, mainViewModel: com.example.monday.viewmodels.MainViewModel,
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel,
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // ── State ────────────────────────────────────────────────────────
+    var currentCategory by remember { mutableStateOf<SettingsCategory?>(null) }
     
-    // State for category management
     var showPrimaryCategories by remember { mutableStateOf(true) }
     var showSecondaryCategories by remember { mutableStateOf(true) }
     var showTertiaryCategories by remember { mutableStateOf(true) }
-    
+    var enablePaymentMonitor by remember { mutableStateOf(true) }
+    var enablePaymentVibration by remember { mutableStateOf(true) }
+    var enableAutoMasterSave by remember { mutableStateOf(false) }
+    var dashboardViewMode by remember { mutableStateOf("both") }
+    var dateBarPosition by remember { mutableStateOf("mid") }
+
+    BackHandler(enabled = currentCategory != null) {
+        currentCategory = null
+    }
+
     var showEditCategoryDialog by remember { mutableStateOf<Triple<String, ExpenseCategory?, ExpenseCategory?>>(Triple("", null, null)) }
     var showDeleteConfirmDialog by remember { mutableStateOf<Pair<ExpenseCategory?, String>?>(null) }
-    
-    // Get categories from view model's StateFlows
+
     val primaryCategories by viewModel.primaryCategories.collectAsState()
     val secondaryCategories by viewModel.secondaryCategories.collectAsState()
     val tertiaryCategories by viewModel.tertiaryCategories.collectAsState()
-    
-    // For showing snackbar
     val snackbarHostState = remember { SnackbarHostState() }
-    
-    // Observe last action for undo availability
     val lastCategoryAction by viewModel.lastCategoryAction.collectAsState()
-    
-    // File picker for import
+
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null) {
-            importBackup(context, uri, viewModel)
-        }
+        if (uri != null) { importBackup(context, uri, viewModel, mainViewModel, statsViewModel) }
     }
-    
-    // Load visibility preferences
+
+    // ── Load Preferences ─────────────────────────────────────────────
     LaunchedEffect(Unit) {
-        showPrimaryCategories = viewModel.getCategoryVisibilitySetting("primary") ?: true
-        showSecondaryCategories = viewModel.getCategoryVisibilitySetting("secondary") ?: true
-        showTertiaryCategories = viewModel.getCategoryVisibilitySetting("tertiary") ?: true
+        showPrimaryCategories = settingsViewModel.getCategoryVisibilitySetting("primary") ?: true
+        showSecondaryCategories = settingsViewModel.getCategoryVisibilitySetting("secondary") ?: true
+        showTertiaryCategories = settingsViewModel.getCategoryVisibilitySetting("tertiary") ?: true
+        enablePaymentMonitor = settingsViewModel.getPaymentMonitorSetting("enable_monitor") ?: true
+        enablePaymentVibration = settingsViewModel.getPaymentMonitorSetting("enable_vibration") ?: true
+        enableAutoMasterSave = settingsViewModel.getPaymentMonitorSetting("auto_master_save") ?: false
+        dashboardViewMode = settingsViewModel.getDashboardViewMode()
+        dateBarPosition = settingsViewModel.getDateBarPosition()
     }
-    
+
+    // ── Scaffold ─────────────────────────────────────────────────────
     Scaffold(
+        containerColor = ModernColors.Eggshell,
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(currentCategory?.title ?: "Settings", color = ModernColors.DateText) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ModernColors.Eggshell,
+                    navigationIconContentColor = ModernColors.DateText,
+                    actionIconContentColor = ModernColors.DateText
+                ),
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = { 
+                        if (currentCategory != null) currentCategory = null 
+                        else onNavigateBack() 
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    // Show undo button only if there's a last action to undo
                     if (lastCategoryAction != null) {
                         IconButton(
                             onClick = {
@@ -96,7 +137,7 @@ fun SettingsScreen(
                             }
                         ) {
                             Icon(
-                                Icons.AutoMirrored.Filled.Undo, 
+                                Icons.AutoMirrored.Filled.Undo,
                                 contentDescription = "Undo Last Category Change",
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -107,423 +148,148 @@ fun SettingsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp)
-        ) {
-            // Backup & Restore Section
-            item {
-                Text(
-                    text = "Backup & Restore",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-                
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Data Management",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        
-                        // Export Data
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { 
-                                    scope.launch {
-                                        exportBackup(context, viewModel)
-                                    }
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+        if (currentCategory == null) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = paddingValues,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(SettingsCategory.values()) { category ->
+                    Card(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { currentCategory = category },
+                        colors = CardDefaults.cardColors(containerColor = ModernColors.CardBg)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                Icons.Default.Upload,
-                                contentDescription = "Export Data",
-                                tint = MaterialTheme.colorScheme.primary
+                                imageVector = category.icon,
+                                contentDescription = category.title,
+                                modifier = Modifier.size(48.dp),
+                                tint = ModernColors.EggnogDark
                             )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(
-                                    text = "Export Data",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = "Save all your expenses and settings",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                        
-                        // Import Data
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { 
-                                    filePickerLauncher.launch("*/*")
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Download,
-                                contentDescription = "Import Data",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(
-                                    text = "Import Data",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = "Restore your expenses from backup",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Floating Button Section
-            item {
-                Text(
-                    text = "Quick Access",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-                
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Floating Button",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        
-                        Text(
-                            text = "Add expenses from anywhere on your phone with a floating button that appears over all apps",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        )
-                        
-                        // Enable Floating Button
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { 
-                                    if (OverlayHelper.hasOverlayPermission(context)) {
-                                        OverlayHelper.startOverlayService(context)
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("Floating button enabled!")
-                                        }
-                                    } else {
-                                        OverlayHelper.openOverlaySettings(context)
-                                    }
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.TouchApp,
-                                contentDescription = "Enable Floating Button",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Enable Floating Button",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = if (OverlayHelper.hasOverlayPermission(context)) 
-                                        "Tap to activate" 
-                                    else 
-                                        "Grant permission first",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                        
-                        // Disable Floating Button
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { 
-                                    OverlayHelper.stopOverlayService(context)
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Floating button disabled")
-                                    }
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Disable Floating Button",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(
-                                    text = "Disable Floating Button",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = "Remove the floating button",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Categories Title
-            item {
-                Text(
-                    text = "Categories",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-            }
-            
-            // Category visibility settings
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Category Visibility",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                            Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Show Primary Categories (People)",
-                                modifier = Modifier.weight(1f)
-                            )
-                            Switch(
-                                checked = showPrimaryCategories,
-                                onCheckedChange = { 
-                                    showPrimaryCategories = it
-                                    scope.launch {
-                                        viewModel.saveCategoryVisibilitySetting("primary", it)
-                                    }
-                                }
-                            )
-                        }
-                        
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Show Secondary Categories (Purpose)",
-                                modifier = Modifier.weight(1f)
-                            )
-                            Switch(
-                                checked = showSecondaryCategories,
-                                onCheckedChange = { 
-                                    showSecondaryCategories = it
-                                    scope.launch {
-                                        viewModel.saveCategoryVisibilitySetting("secondary", it)
-                                    }
-                                }
-                            )
-                        }
-                        
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Show Tertiary Categories (Type)",
-                                modifier = Modifier.weight(1f)
-                            )
-                            Switch(
-                                checked = showTertiaryCategories,
-                                onCheckedChange = { 
-                                    showTertiaryCategories = it
-                                    scope.launch {
-                                        viewModel.saveCategoryVisibilitySetting("tertiary", it)
-                                    }
-                                }
+                                text = category.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ModernColors.DateText
                             )
                         }
                     }
                 }
             }
-            
-            // Primary Categories Management
-            if (showPrimaryCategories) {
-                item {
-                    EnhancedCategorySection(
-                        title = "Primary Categories (People)",
-                        categories = primaryCategories,
-                        onAddCategory = {
-                            showEditCategoryDialog = Triple("primary", null, null)
-                        },
-                        onEditCategory = { category ->
-                            showEditCategoryDialog = Triple("primary", category, null)
-                        },
-                        onDeleteCategory = { category ->
-                            showDeleteConfirmDialog = Pair(category, "primary")
-                        },
-                        onMoveCategory = { category, moveUp ->
-                            val currentIndex = primaryCategories.indexOf(category)
-                            val newIndex = if (moveUp) {
-                                maxOf(0, currentIndex - 1)
-                            } else {
-                                minOf(primaryCategories.size - 1, currentIndex + 1)
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp)
+            ) {
+                when (currentCategory) {
+                    SettingsCategory.DASHBOARD -> {
+                        dashboardSettingsSection(
+                            dashboardViewMode = dashboardViewMode,
+                            dateBarPosition = dateBarPosition,
+                            scope = scope,
+                            settingsViewModel = settingsViewModel,
+                            snackbarHostState = snackbarHostState,
+                            onDashboardModeChange = { dashboardViewMode = it },
+                            onDateBarPositionChange = { dateBarPosition = it }
+                        )
+                    }
+                    SettingsCategory.BACKUP -> {
+                        backupRestoreSection(
+                            enableAutoMasterSave = enableAutoMasterSave,
+                            context = context,
+                            scope = scope,
+                            viewModel = viewModel, mainViewModel = mainViewModel, statsViewModel = statsViewModel,
+                            settingsViewModel = settingsViewModel,
+                            snackbarHostState = snackbarHostState,
+                            onAutoMasterSaveChange = { enableAutoMasterSave = it },
+                            onImportClick = { filePickerLauncher.launch("*/*") }
+                        )
+                    }
+                    SettingsCategory.QUICK_ACCESS -> {
+                        quickAccessSection(
+                            context = context,
+                            scope = scope,
+                            snackbarHostState = snackbarHostState
+                        )
+                    }
+                    SettingsCategory.PAYMENT_MONITOR -> {
+                        paymentMonitorSection(
+                            context = context,
+                            enablePaymentMonitor = enablePaymentMonitor,
+                            enablePaymentVibration = enablePaymentVibration,
+                            scope = scope,
+                            snackbarHostState = snackbarHostState,
+                            settingsViewModel = settingsViewModel,
+                            onMonitorChange = { enablePaymentMonitor = it },
+                            onVibrationChange = { enablePaymentVibration = it }
+                        )
+                    }
+                    SettingsCategory.CATEGORIES -> {
+                        categoriesSection(
+                            showPrimary = showPrimaryCategories,
+                            showSecondary = showSecondaryCategories,
+                            showTertiary = showTertiaryCategories,
+                            primaryCategories = primaryCategories,
+                            secondaryCategories = secondaryCategories,
+                            tertiaryCategories = tertiaryCategories,
+                            scope = scope,
+                            viewModel = viewModel,
+                            settingsViewModel = settingsViewModel,
+                            onPrimaryVisibilityChange = { showPrimaryCategories = it },
+                            onSecondaryVisibilityChange = { showSecondaryCategories = it },
+                            onTertiaryVisibilityChange = { showTertiaryCategories = it },
+                            onEditCategory = { type, category ->
+                                showEditCategoryDialog = Triple(type, category, null)
+                            },
+                            onDeleteCategory = { category, type ->
+                                showDeleteConfirmDialog = Pair(category, type)
                             }
-                            
-                            if (currentIndex != newIndex) {
-                                scope.launch {
-                                    viewModel.moveCategory(category, "primary", newIndex)
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-            
-            // Secondary Categories Management
-            if (showSecondaryCategories) {
-                item {
-                    EnhancedCategorySection(
-                        title = "Secondary Categories (Purpose)",
-                        categories = secondaryCategories,
-                        onAddCategory = {
-                            showEditCategoryDialog = Triple("secondary", null, null)
-                        },
-                        onEditCategory = { category ->
-                            showEditCategoryDialog = Triple("secondary", category, null)
-                        },
-                        onDeleteCategory = { category ->
-                            showDeleteConfirmDialog = Pair(category, "secondary")
-                        },
-                        onMoveCategory = { category, moveUp ->
-                            val currentIndex = secondaryCategories.indexOf(category)
-                            val newIndex = if (moveUp) {
-                                maxOf(0, currentIndex - 1)
-                            } else {
-                                minOf(secondaryCategories.size - 1, currentIndex + 1)
-                            }
-                            
-                            if (currentIndex != newIndex) {
-                                scope.launch {
-                                    viewModel.moveCategory(category, "secondary", newIndex)
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-            
-            // Tertiary Categories Management
-            if (showTertiaryCategories) {
-                item {
-                    EnhancedCategorySection(
-                        title = "Tertiary Categories (Type)",
-                        categories = tertiaryCategories,
-                        onAddCategory = {
-                            showEditCategoryDialog = Triple("tertiary", null, null)
-                        },
-                        onEditCategory = { category ->
-                            showEditCategoryDialog = Triple("tertiary", category, null)
-                        },
-                        onDeleteCategory = { category ->
-                            showDeleteConfirmDialog = Pair(category, "tertiary")
-                        },
-                        onMoveCategory = { category, moveUp ->
-                            val currentIndex = tertiaryCategories.indexOf(category)
-                            val newIndex = if (moveUp) {
-                                maxOf(0, currentIndex - 1)
-                            } else {
-                                minOf(tertiaryCategories.size - 1, currentIndex + 1)
-                            }
-                            
-                            if (currentIndex != newIndex) {
-                                scope.launch {
-                                    viewModel.moveCategory(category, "tertiary", newIndex)
-                                }
-                            }
-                        }
-                    )
+                        )
+                    }
+                    null -> {}
                 }
             }
         }
     }
-    
-    // Edit Category Dialog
+
+    // ── Dialogs ──────────────────────────────────────────────────────
     if (showEditCategoryDialog.first.isNotEmpty()) {
         val (categoryType, categoryToEdit, _) = showEditCategoryDialog
-        
         EditCategoryDialog(
             category = categoryToEdit,
             onDismiss = { showEditCategoryDialog = Triple("", null, null) },
             onSave = { name, icon ->
                 val newCategory = ExpenseCategory(name, icon)
-                
                 scope.launch {
                     if (categoryToEdit != null) {
-                        // This is an edit
                         viewModel.updateCategory(categoryToEdit, newCategory, categoryType)
-                        
-                        // Show success message if name was changed
                         if (categoryToEdit.name != name) {
-                            val message = "Category '${categoryToEdit.name}' renamed to '$name' throughout the app"
-                            snackbarHostState.showSnackbar(message)
+                            snackbarHostState.showSnackbar("Category '${categoryToEdit.name}' renamed to '$name' throughout the app")
                         }
                     } else {
-                        // This is an add
                         viewModel.addCategory(newCategory, categoryType)
                         snackbarHostState.showSnackbar("Category '$name' added")
                     }
                 }
-                
                 showEditCategoryDialog = Triple("", null, null)
             }
         )
     }
-    
-    // Delete Confirmation Dialog
+
     showDeleteConfirmDialog?.let { (category, type) ->
         if (category != null) {
             DeleteCategoryConfirmDialog(
@@ -557,7 +323,7 @@ fun EditCategoryDialog(
     var categoryName by remember { mutableStateOf(category?.name ?: "") }
     var selectedIcon by remember { mutableStateOf(category?.icon ?: Icons.Outlined.Category) }
     var showIconPicker by remember { mutableStateOf(false) }
-    
+
     val availableIcons = listOf(
         Icons.Outlined.Person to "Person",
         Icons.Outlined.People to "People",
@@ -577,7 +343,7 @@ fun EditCategoryDialog(
         Icons.Outlined.Medication to "Health",
         Icons.Outlined.MoreHoriz to "Other"
     )
-    
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isNewCategory) "Add Category" else "Edit Category") },
@@ -592,13 +358,13 @@ fun EditCategoryDialog(
                         .fillMaxWidth()
                         .padding(bottom = 16.dp)
                 )
-                
+
                 Text(
                     text = "Category Icon",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-                
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -612,22 +378,15 @@ fun EditCategoryDialog(
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
-                    
                     Spacer(modifier = Modifier.width(16.dp))
-                    
                     Text(
                         text = availableIcons.find { it.first == selectedIcon }?.second ?: "Select Icon",
                         style = MaterialTheme.typography.bodyLarge
                     )
-                    
                     Spacer(modifier = Modifier.weight(1f))
-                    
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = null
-                    )
+                    Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null)
                 }
-                
+
                 if (showIconPicker) {
                     Card(
                         modifier = Modifier
@@ -654,21 +413,19 @@ fun EditCategoryDialog(
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = null,
-                                        tint = if (icon == selectedIcon) 
+                                        tint = if (icon == selectedIcon)
                                             MaterialTheme.colorScheme.primary
-                                        else 
+                                        else
                                             MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.size(24.dp)
                                     )
-                                    
                                     Spacer(modifier = Modifier.width(16.dp))
-                                    
                                     Text(
                                         text = name,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = if (icon == selectedIcon) 
+                                        color = if (icon == selectedIcon)
                                             MaterialTheme.colorScheme.primary
-                                        else 
+                                        else
                                             MaterialTheme.colorScheme.onSurface
                                     )
                                 }
@@ -692,4 +449,4 @@ fun EditCategoryDialog(
             }
         }
     )
-} 
+}

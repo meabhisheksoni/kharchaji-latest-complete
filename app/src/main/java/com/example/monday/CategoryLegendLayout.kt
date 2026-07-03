@@ -67,6 +67,18 @@ private fun CategoryColumn(
     horizontalAlignment: Alignment.Horizontal
 ) {
     var expanded by remember { mutableStateOf(false) }
+    
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+
+    // Anti-Fragile Memory Leak Fix: Ensure PopupLayout and AccessibilityManager unregister appropriately upon teardown
+    DisposableEffect(expanded) {
+        onDispose {
+            if (expanded) {
+                expanded = false
+                focusManager.clearFocus(force = true)
+            }
+        }
+    }
     val visibleCategories = categories.take(3)
 
     Box(modifier = modifier) {
@@ -101,7 +113,10 @@ private fun CategoryColumn(
                     Alignment.CenterHorizontally -> Alignment.TopCenter
                     else -> Alignment.TopEnd
                 },
-                onDismissRequest = { expanded = false },
+                onDismissRequest = { 
+                    expanded = false
+                    focusManager.clearFocus(force = true)
+                },
                 properties = PopupProperties(
                     focusable = true,
                     dismissOnBackPress = true,

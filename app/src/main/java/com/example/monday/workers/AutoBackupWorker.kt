@@ -1,11 +1,12 @@
 package com.example.monday.workers
+import com.example.monday.data.local.TodoDao
+import com.example.monday.data.local.AppDatabase
 
 import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.example.monday.AppDatabase
-import com.example.monday.TodoRepository
+import com.example.monday.data.TodoRepository
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,7 +16,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import com.example.monday.AppBackup
+import com.example.monday.core.utils.AppBackup
 
 /**
  * Worker class for performing automatic backups at scheduled intervals
@@ -31,7 +32,6 @@ class AutoBackupWorker(
     }
     
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Starting scheduled auto-backup")
         
         try {
             // Get repository and database access
@@ -43,7 +43,6 @@ class AutoBackupWorker(
             val allRecords = repository.getAllCalculationRecordsForExport()
             
             if (allExpenses.isEmpty() && allRecords.isEmpty()) {
-                Log.d(TAG, "No data to backup, skipping")
                 return@withContext Result.success()
             }
             
@@ -66,12 +65,10 @@ class AutoBackupWorker(
             val backupDir = File(context.getExternalFilesDir(null), "auto_backups")
             if (!backupDir.exists()) {
                 val created = backupDir.mkdirs()
-                Log.d(TAG, "Created backup directory: $created")
             }
             
             // Create the ZIP file and add JSON data
             val zipFile = File(backupDir, fileName)
-            Log.d(TAG, "Creating backup file: ${zipFile.absolutePath}")
             
             // Create a temporary JSON file
             val jsonFile = File(context.cacheDir, jsonFileName)
@@ -99,11 +96,8 @@ class AutoBackupWorker(
             if (allBackups != null && allBackups.size > 5) {
                 allBackups.drop(5).forEach { oldBackup ->
                     val deleted = oldBackup.delete()
-                    Log.d(TAG, "Deleted old backup ${oldBackup.name}: $deleted")
                 }
             }
-            
-            Log.d(TAG, "Auto-backup completed successfully: ${zipFile.name}")
             Result.success()
             
         } catch (e: Exception) {
@@ -112,3 +106,4 @@ class AutoBackupWorker(
         }
     }
 } 
+

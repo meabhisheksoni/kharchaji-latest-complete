@@ -1,4 +1,6 @@
 package com.example.monday.ui.screens
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -42,7 +44,7 @@ fun ExpenseCalendarDialog(
     selectedDate: LocalDate,
     onDismiss: () -> Unit,
     onDateSelected: (LocalDate) -> Unit,
-    todoViewModel: TodoViewModel
+    todoViewModel: TodoViewModel, statsViewModel: com.example.monday.viewmodels.StatsViewModel
 ) {
     var currentYearMonth by remember { mutableStateOf(YearMonth.from(selectedDate)) }
     
@@ -54,7 +56,8 @@ fun ExpenseCalendarDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.9f),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
         ) {
             Column(
                 modifier = Modifier
@@ -81,11 +84,40 @@ fun ExpenseCalendarDialog(
                         )
                     }
                     
-                    Text(
-                        text = currentYearMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = currentYearMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        
+                        // Monthly total - sum of all daily master records
+                        var monthlyTotal by remember(currentYearMonth) { mutableStateOf(0.0) }
+                        
+                        LaunchedEffect(currentYearMonth, todoViewModel) {
+                            val startOfMonthMillis = currentYearMonth.atDay(1)
+                                .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                            val endOfMonthMillis = currentYearMonth.atEndOfMonth()
+                                .plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
+                            
+                            // Get all master records for this month
+                            val masterRecords = statsViewModel.getMasterRecordsForMonth(startOfMonthMillis, endOfMonthMillis)
+                            
+                            // Sum up the totalSum from each master record (one per day)
+                            monthlyTotal = masterRecords.sumOf { it.totalSum }
+                        }
+                        
+                        if (monthlyTotal > 0) {
+                            Text(
+                                text = formatIndianCurrency(monthlyTotal),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
                     
                     IconButton(
                         onClick = {
@@ -156,7 +188,7 @@ fun ExpenseCalendarDialog(
                                     MonthDayCell(
                                         date = date,
                                         isSelected = isSelected,
-                                        todoViewModel = todoViewModel,
+                                        todoViewModel = todoViewModel, statsViewModel = statsViewModel,
                                         onClick = { onDateSelected(date) }
                                     )
                                 }
@@ -181,20 +213,20 @@ fun ExpenseCalendarDialog(
 private fun MonthDayCell(
     date: LocalDate,
     isSelected: Boolean,
-    todoViewModel: TodoViewModel,
+    todoViewModel: TodoViewModel, statsViewModel: com.example.monday.viewmodels.StatsViewModel,
     onClick: () -> Unit
 ) {
     var dailyTotal by remember(date) { mutableStateOf<Double?>(null) }
 
     LaunchedEffect(date, todoViewModel) {
         // First try to get a master record for this date specifically
-        todoViewModel.getMasterRecordForDate(date).collect { masterRecord ->
+        statsViewModel.getMasterRecordForDate(date).collect { masterRecord ->
             if (masterRecord != null) {
                 // If a master record exists, use its total
                 dailyTotal = masterRecord.totalSum
             } else {
                 // Fall back to the old method if no master record found
-                todoViewModel.getCalculationRecordsForDate(date).collect { records ->
+                statsViewModel.getCalculationRecordsForDate(date).collect { records ->
                     // Filter for master records first
                     val masterRecords = records.filter { it.isMasterSave }
                     

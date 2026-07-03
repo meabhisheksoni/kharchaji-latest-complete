@@ -1,5 +1,7 @@
 package com.example.monday
 
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
@@ -16,7 +18,8 @@ import java.time.format.DateTimeFormatter
  */
 class BatchSaveRecordsHelper(
     private val context: Context,
-    private val todoViewModel: TodoViewModel
+    private val todoViewModel: TodoViewModel, private val mainViewModel: com.example.monday.viewmodels.MainViewModel,
+    private val statsViewModel: com.example.monday.viewmodels.StatsViewModel
 ) {
     /**
      * Saves all expenses for each date in the specified range as CalculationRecords.
@@ -28,7 +31,7 @@ class BatchSaveRecordsHelper(
         onProgress: (current: Int, total: Int, date: LocalDate) -> Unit = { _, _, _ -> },
         onComplete: (totalSaved: Int) -> Unit = { _ -> }
     ) {
-        todoViewModel.viewModelScope.launch(Dispatchers.IO) {
+        mainViewModel.viewModelScope.launch(Dispatchers.IO) {
             var currentDate = startDate
             var totalDays = 0
             var totalRecordsSaved = 0
@@ -42,6 +45,14 @@ class BatchSaveRecordsHelper(
             currentDate = startDate
             var currentDayCount = 0
             
+            // Single DB query for ALL expenses in range to prevent N+1 queries
+            val startMillis = startDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val endMillis = endDate.plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
+            val allExpenses = mainViewModel.getAllItemsForDateRange(startMillis, endMillis)
+            val expensesByDate = allExpenses.groupBy { item ->
+                java.time.Instant.ofEpochMilli(item.timestamp).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            }
+            
             // Process each date
             while (!currentDate.isAfter(endDate)) {
                 currentDayCount++
@@ -50,7 +61,9 @@ class BatchSaveRecordsHelper(
                     onProgress(currentDayCount, totalDays, currentDate)
                 }
                 
-                val savedRecord = processAndSaveRecordForDate(currentDate)
+                // Pass the pre-fetched expenses directly
+                val expensesForDate = expensesByDate[currentDate] ?: emptyList()
+                val savedRecord = processAndSaveRecordForDate(currentDate, expensesForDate)
                 if (savedRecord) totalRecordsSaved++
                 
                 currentDate = currentDate.plusDays(1)
@@ -59,7 +72,7 @@ class BatchSaveRecordsHelper(
             withContext(Dispatchers.Main) {
                 onComplete(totalRecordsSaved)
                 Toast.makeText(
-                    context,
+                    context.applicationContext,
                     "Master batch save completed. Saved $totalRecordsSaved master records across $totalDays days.",
                     Toast.LENGTH_LONG
                 ).show()
@@ -71,29 +84,15 @@ class BatchSaveRecordsHelper(
      * Process and save a record for a specific date if it has expenses.
      * Returns true if a record was saved, false otherwise.
      */
-    private suspend fun processAndSaveRecordForDate(date: LocalDate): Boolean {
+    private suspend fun processAndSaveRecordForDate(date: LocalDate, expenses: List<TodoItem>): Boolean {
         try {
-            // Direct database query to get all expenses for the date
-            val startOfDayMillis = date.toEpochMilli()
-            val endOfDayMillis = date.plusDays(1).toEpochMilli() - 1
-            
-            // Log date information for debugging
-            Log.d("BatchSaveHelper", "Processing date: $date (${date.toEpochMilli()})")
-            
-            // Get all items directly from the database for this date range
-            val expenses = todoViewModel.getAllItemsForDateRange(startOfDayMillis, endOfDayMillis)
-            
             if (expenses.isEmpty()) {
-                Log.d("BatchSaveHelper", "No expenses found for date: $date")
                 return false
             }
             
-            Log.d("BatchSaveHelper", "Found ${expenses.size} expenses for date: $date")
-            
             // Instead of creating and inserting a regular record, use saveToMasterRecord
             // which will create a master record or update an existing one
-            Log.d("BatchSaveHelper", "Creating master save record for date: $date")
-            val saveResult = todoViewModel.saveToMasterRecord(date, expenses)
+            val saveResult = statsViewModel.saveToMasterRecord(date, expenses)
             
             // The saveToMasterRecord function returns a pair where the second boolean indicates if a master record was created/updated
             val masterRecordCreatedOrUpdated = saveResult.second

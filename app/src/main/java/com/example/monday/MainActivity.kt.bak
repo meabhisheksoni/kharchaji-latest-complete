@@ -1,0 +1,506 @@
+package com.example.monday
+
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.monday.viewmodels.ExpenseViewModel
+import com.example.monday.viewmodels.SettingsViewModel
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.monday.ui.theme.KharchajiTheme
+import com.example.monday.ui.overlay.OverlayHelper
+import com.example.monday.core.utils.*
+import com.example.monday.data.models.TodoItem
+import com.example.monday.ModernExpenseListScreen
+import com.example.monday.ShareScreen
+import com.example.monday.StatisticsScreen
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.BugReport
+import androidx.navigation3.ui.NavDisplay
+import androidx.navigation3.ui.entryProvider
+import androidx.navigation3.ui.entry
+import androidx.navigation3.ui.DialogSceneStrategy
+import com.example.monday.core.navigation.*
+import java.time.LocalDate
+import com.example.monday.ui.screens.BatchSaveScreen
+import kotlinx.coroutines.launch
+import java.time.ZoneId
+import java.time.Instant
+import kotlinx.coroutines.CoroutineScope
+import com.example.monday.ui.screens.SettingsScreen
+import com.example.monday.AllExpensesScreen
+import com.example.monday.FindAndReplaceScreen
+import com.example.monday.MonthlyReportScreen
+import com.example.monday.CategoryFilterScreen
+import android.os.Build
+import androidx.annotation.RequiresApi
+import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import com.example.monday.ui.screens.MasterOnlyCategoriesScreen
+import com.example.monday.ui.screens.MasterCategoryDetailScreen
+import com.example.monday.ui.modern.ModernColors
+
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.O)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // Ensure edge-to-edge behavior to use the full mobile screen size
+        enableEdgeToEdge()
+        
+        // Auto-start overlay service
+        OverlayHelper.startOverlayService(this)
+        
+        setContent {
+            KharchajiTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    TodoApp()
+                }
+            }
+        }
+    }
+}
+
+
+
+@RequiresApi(Build.VERSION_CODES.O)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TodoApp(
+    todoViewModel: TodoViewModel = hiltViewModel(),
+    expenseViewModel: ExpenseViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    exportViewModel: com.example.monday.viewmodels.ExportViewModel = hiltViewModel(),
+    statsViewModel: com.example.monday.viewmodels.StatsViewModel = hiltViewModel()
+) {
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    Scaffold(
+        bottomBar = {
+            if (currentRoute != AppDestinations.ADD_EXPENSE &&
+                currentRoute != AppDestinations.SHARE_SCREEN &&
+                currentRoute != AppDestinations.CALCULATION_RECORD_DETAIL &&
+                !currentRoute.toString().startsWith(AppDestinations.EDIT_RECORD_DETAIL)
+            ) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Gradient divider — dark at center, transparent at edges (same style as hero/date separator)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp)
+                                .height(1.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            ModernColors.EggnogLight.copy(alpha = 0.3f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                )
+                        )
+                        // Nav bar — flat rectangle, matching home page Eggshell background
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RectangleShape, // Rectangular, no rounded corners
+                            color = ModernColors.SoftCream, // #FFFBF0 background color
+                            shadowElevation = 0.dp // Divider above handles visual separation
+                        ) {
+                            NavigationBar(
+                                containerColor = Color.Transparent, // Surface handles the color
+                                tonalElevation = 0.dp,
+                                windowInsets = WindowInsets(0.dp), // Strip system insets to remove extra bottom padding
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Home
+                                NavigationBarItem(
+                                    selected = currentRoute == AppDestinations.EXPENSE_LIST,
+                                    onClick = {
+                                        if (currentRoute != AppDestinations.EXPENSE_LIST)
+                                            navController.navigate(AppDestinations.EXPENSE_LIST) {
+                                                popUpTo(AppDestinations.EXPENSE_LIST) { inclusive = true }
+                                            }
+                                    },
+                                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home", modifier = Modifier.size(22.dp)) },
+                                    label = { Text("Home", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color(0xFF222222),
+                                        selectedTextColor = Color(0xFF222222),
+                                        unselectedIconColor = Color(0xFF999999),
+                                        unselectedTextColor = Color(0xFF999999),
+                                        indicatorColor = Color.Transparent
+                                    )
+                                )
+
+                                // Insights
+                                NavigationBarItem(
+                                    selected = currentRoute == AppDestinations.STATISTICS,
+                                    onClick = { navController.navigate(AppDestinations.STATISTICS) },
+                                    icon = { Icon(Icons.Filled.Assessment, contentDescription = "Insights", modifier = Modifier.size(22.dp)) },
+                                    label = { Text("Insights", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color(0xFF222222),
+                                        selectedTextColor = Color(0xFF222222),
+                                        unselectedIconColor = Color(0xFF999999),
+                                        unselectedTextColor = Color(0xFF999999),
+                                        indicatorColor = Color.Transparent
+                                    )
+                                )
+
+                                // Export — with badge showing buffered item count
+                                val exportCount by exportViewModel.exportBufferCount.collectAsState()
+                                NavigationBarItem(
+                                    selected = false,
+                                    onClick = { navController.navigate(AppDestinations.SHARE_SCREEN) },
+                                    icon = {
+                                        BadgedBox(
+                                            badge = {
+                                                if (exportCount > 0) {
+                                                    Badge(
+                                                        containerColor = ModernColors.Groceries,
+                                                        contentColor = Color.White
+                                                    ) {
+                                                        Text("$exportCount", fontSize = 9.sp)
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Icon(Icons.Filled.Share, contentDescription = "Export", modifier = Modifier.size(22.dp))
+                                        }
+                                    },
+                                    label = { Text("Export", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color(0xFF222222),
+                                        selectedTextColor = Color(0xFF222222),
+                                        unselectedIconColor = Color(0xFF999999),
+                                        unselectedTextColor = Color(0xFF999999),
+                                        indicatorColor = Color.Transparent
+                                    )
+                                )
+
+                                // Settings
+                                NavigationBarItem(
+                                    selected = currentRoute == AppDestinations.SETTINGS_SCREEN,
+                                    onClick = { navController.navigate(AppDestinations.SETTINGS_SCREEN) },
+                                    icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings", modifier = Modifier.size(22.dp)) },
+                                    label = { Text("Settings", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color(0xFF222222),
+                                        selectedTextColor = Color(0xFF222222),
+                                        unselectedIconColor = Color(0xFF999999),
+                                        unselectedTextColor = Color(0xFF999999),
+                                        indicatorColor = Color.Transparent
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    // Floating "+" FAB — sits at right edge, moved further up to avoid Settings overlap
+                    FloatingActionButton(
+                        onClick = { navController.navigate(AppDestinations.ADD_EXPENSE) },
+                        containerColor = Color(0xFF222222),
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(22.dp),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 18.dp)
+                            .offset(y = (-44).dp) // Moved up from -24dp to clear Settings icon perfectly
+                            .size(52.dp),
+                        elevation = FloatingActionButtonDefaults.elevation(
+                            defaultElevation = 10.dp,
+                            pressedElevation = 16.dp
+                        )
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "Add", modifier = Modifier.size(24.dp))
+                    }
+                }
+            }
+        }
+
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = AppDestinations.EXPENSE_LIST,
+            // Only apply bottom padding from outer scaffold; screens with their own TopAppBar
+            // apply status bar padding themselves â€” applying top here would double-stack it.
+            modifier = Modifier.padding(
+                bottom = innerPadding.calculateBottomPadding()
+            )
+        ) {
+            composable(AppDestinations.EXPENSE_LIST) {
+                ModernExpenseListScreen(
+                    todoViewModel = todoViewModel,
+                    expenseViewModel = expenseViewModel,
+                    exportViewModel = exportViewModel,
+                    statsViewModel = statsViewModel,
+                    settingsViewModel = settingsViewModel,
+                    onShareClick = {
+                        navController.navigate(AppDestinations.SHARE_SCREEN)
+                    },
+                    onNavigateToBatchSave = { navController.navigate(AppDestinations.BATCH_SAVE_SCREEN) },
+                    onNavigateToSettings = { navController.navigate(AppDestinations.SETTINGS_SCREEN) },
+                    onViewRecordsClick = { 
+                        val currentSelectedDateMillis = todoViewModel.selectedDate.value.toEpochMilli()
+                        val route = AppDestinations.calculationRecordsRoute(currentSelectedDateMillis)
+                        navController.navigate(route)
+                    },
+                    onAllExpensesClick = {
+                        navController.navigate(AppDestinations.ALL_EXPENSES)
+                    }
+                )
+            }
+            composable(AppDestinations.ADD_EXPENSE) {
+                AddNewExpenseScreenV2(
+                    expenseViewModel = expenseViewModel,
+                    onNextClick = { navController.popBackStack() }
+                )
+            }
+            composable(AppDestinations.STATISTICS) {
+                StatisticsScreen(
+                    onNavigateToAllExpenses = {
+                        navController.navigate(AppDestinations.ALL_EXPENSES)
+                    },
+                    onNavigateToFindAndReplace = {
+                        navController.navigate(AppDestinations.FIND_AND_REPLACE)
+                    },
+                    onNavigateToMonthlyReport = {
+                        navController.navigate(AppDestinations.MONTHLY_REPORT)
+                    },
+                    onNavigateToCategories = {
+                        navController.navigate(AppDestinations.MASTER_ONLY_CATEGORIES)
+                    },
+                    onNavigateToTrends = {
+                        navController.navigate(AppDestinations.TRENDS)
+                    }
+                )
+            }
+            composable(AppDestinations.SHARE_SCREEN) {
+                val currentSelectedDate by todoViewModel.selectedDate.collectAsState()
+                ShareScreen(
+                    todoViewModel = todoViewModel,
+                    expenseViewModel = expenseViewModel,
+                    exportViewModel = exportViewModel,
+                    statsViewModel = statsViewModel,
+                    currentSelectedDate = currentSelectedDate,
+                    onDismiss = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = AppDestinations.CALCULATION_RECORDS_ROUTE,
+                arguments = listOf(navArgument("dateMillis") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val dateMillisFromArgs = backStackEntry.arguments?.getLong("dateMillis")
+
+                val recordDate: LocalDate? = dateMillisFromArgs?.let { millis -> 
+                    if (millis == 0L && backStackEntry.arguments?.containsKey("dateMillis") == false) {
+                        null
+                    } else {
+                        millis.toLocalDate()
+                    }
+                }
+                
+                CalculationRecordsScreen(
+                    todoViewModel = todoViewModel,
+                    statsViewModel = statsViewModel,
+                    displayDate = recordDate,
+                    onNavigateBack = { navController.popBackStack() },
+                    onRecordClick = { recordId ->
+                        navController.navigate("${AppDestinations.CALCULATION_RECORD_DETAIL}/$recordId")
+                    },
+                    onEditRecordClick = { recordId ->
+                        navController.navigate("${AppDestinations.EDIT_RECORD_DETAIL}/$recordId")
+                    }
+                )
+            }
+            composable("${AppDestinations.CALCULATION_RECORD_DETAIL}/{recordId}") { backStackEntry ->
+                val recordId = backStackEntry.arguments?.getString("recordId")?.toIntOrNull()
+                if (recordId != null) {
+                    CalculationRecordDetailScreen(
+                        recordId = recordId,
+                        todoViewModel = todoViewModel,
+                        statsViewModel = statsViewModel,
+                        onNavigateBack = { navController.popBackStack() },
+                        onSetMemoAndReturnToExpenses = {
+                            navController.popBackStack(AppDestinations.EXPENSE_LIST, inclusive = false)
+                        }
+                    )
+                } else {
+                    navController.popBackStack()
+                }
+            }
+            composable("${AppDestinations.EDIT_RECORD_DETAIL}/{recordId}") { backStackEntry ->
+                val recordId = backStackEntry.arguments?.getString("recordId")?.toIntOrNull()
+                if (recordId != null) {
+                    EditRecordScreen(
+                        recordId = recordId,
+                        todoViewModel = todoViewModel,
+                        statsViewModel = statsViewModel,
+                        onNavigateBack = { navController.popBackStack() },
+                        onSaveComplete = { navController.popBackStack() }
+                    )
+                } else {
+                    navController.popBackStack()
+                }
+            }
+            
+            composable(AppDestinations.BATCH_SAVE_SCREEN) {
+                BatchSaveScreen(
+                    todoViewModel = todoViewModel,
+                    statsViewModel = statsViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            
+            composable(AppDestinations.SETTINGS_SCREEN) {
+                SettingsScreen(
+                    viewModel = todoViewModel,
+                    statsViewModel = statsViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            
+            composable(AppDestinations.ALL_EXPENSES) {
+                AllExpensesScreen(
+                    todoViewModel = todoViewModel,
+                    statsViewModel = statsViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            
+            composable(AppDestinations.TRENDS) {
+                TrendsScreen(
+                    todoViewModel = todoViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            
+            composable(AppDestinations.FIND_AND_REPLACE) {
+                FindAndReplaceScreen(
+                    todoViewModel = todoViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            
+            composable(AppDestinations.MONTHLY_REPORT) {
+                val selectedCategories by navController
+                    .currentBackStackEntry!!
+                    .savedStateHandle
+                    .getLiveData<List<String>>("selected_categories")
+                    .observeAsState(emptyList())
+
+                MonthlyReportScreen(
+                    todoViewModel = todoViewModel,
+                    statsViewModel = statsViewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToFilter = {
+                        navController.navigate(AppDestinations.CATEGORY_FILTER)
+                    },
+                    selectedCategories = selectedCategories
+                )
+            }
+            composable(AppDestinations.CATEGORY_FILTER) {
+                val initialCategories = navController
+                    .previousBackStackEntry
+                    ?.savedStateHandle
+                    ?.get<List<String>>("selected_categories") ?: emptyList()
+                
+                CategoryFilterScreen(
+                    todoViewModel = todoViewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    initialSelectedCategories = initialCategories,
+                    onApplyFilters = { filters ->
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set("selected_categories", filters)
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable(AppDestinations.MASTER_ONLY_CATEGORIES) {
+                MasterOnlyCategoriesScreen(
+                    viewModel = todoViewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    onCategoryClick = { category ->
+                        navController.navigate("${AppDestinations.MASTER_CATEGORY_DETAIL}/$category")
+                    }
+                )
+            }
+
+            composable(AppDestinations.MASTER_CATEGORY_DETAIL) { backStackEntry ->
+                val category = backStackEntry.arguments?.getString("category") ?: ""
+                MasterCategoryDetailScreen(
+                    viewModel = todoViewModel,
+                    category = category,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Preview(showBackground = true)
+@Composable
+fun DefaultPreview() {
+    KharchajiTheme {
+        TodoApp()
+    }
+}
