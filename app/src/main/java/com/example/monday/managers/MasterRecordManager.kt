@@ -163,29 +163,62 @@ class MasterRecordManager(private val repository: TodoRepository) {
 
     /**
      * Pure function to calculate category totals from a list of records.
-     * Single O(records * items) pass — no database calls.
+     * Prevents double-counting by attributing each item to exactly one category bucket,
+     * and maps uncategorized items to "Uncategorized".
      */
     fun calculateMasterRecordTotals(records: List<CalculationRecord>): Map<String, Double> {
         val result = mutableMapOf<String, Double>()
         records.forEach { record ->
             record.items.forEach { item ->
-                if (item.categories.isNullOrEmpty() || item.price == null) return@forEach
                 val price = item.price.toDoubleOrNull() ?: return@forEach
 
-                // Direct categories
-                item.categories.forEach { category ->
-                    result[category] = (result[category] ?: 0.0) + price
+                // Credit exactly ONE category per item to prevent stacked-bar inflation
+                val categoryToCredit = if (item.categories.isNullOrEmpty()) {
+                    "Uncategorized"
+                } else {
+                    val (primary, secondary, tertiary) = intelligentlyCategorize(item.categories.toSet())
+                    primary.firstOrNull() 
+                        ?: secondary.firstOrNull() 
+                        ?: tertiary.firstOrNull() 
+                        ?: item.categories.first()
                 }
-
-                // Hierarchical categorization (avoids double-counting)
-                val (primary, secondary, tertiary) = intelligentlyCategorize(item.categories.toSet())
-                    .let { (p, s, t) -> Triple(p.toSet(), s.toSet(), t.toSet()) }
-                primary.forEach { cat -> if (!item.categories.contains(cat)) result[cat] = (result[cat] ?: 0.0) + price }
-                secondary.forEach { cat -> if (!item.categories.contains(cat)) result[cat] = (result[cat] ?: 0.0) + price }
-                tertiary.forEach { cat -> if (!item.categories.contains(cat)) result[cat] = (result[cat] ?: 0.0) + price }
+                
+                result[categoryToCredit] = (result[categoryToCredit] ?: 0.0) + price
             }
         }
         return result
+    }
+
+    /**
+     * Get master record totals grouped strictly by ISO Date String ("YYYY-MM-DD").
+     * Uses persistent record.totalSum and idempotent assignment to prevent double-counting.
+     */
+    suspend fun getMasterRecordDailyTotalsForMonth(yearMonth: YearMonth): Map<String, Double> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val startOfMonthMillis = yearMonth.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val endOfMonthMillis = yearMonth.atEndOfMonth().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
+                val records = repository.getMasterRecordsForDateRange(startOfMonthMillis, endOfMonthMillis)
+                
+                val dailyTotals = mutableMapOf<String, Double>()
+                // Records from repository are sorted by timestamp DESC
+                records.forEach { record ->
+                    val dateStr = java.time.Instant.ofEpochMilli(record.recordDate)
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate()
+                        .toString()
+                    
+                    // Idempotent assignment: newest master revision wins, preventing duplicate accumulation
+                    if (!dailyTotals.containsKey(dateStr)) {
+                        dailyTotals[dateStr] = record.totalSum
+                    }
+                }
+                dailyTotals
+            } catch (e: Exception) {
+                Log.e("MasterRecords", "Error calculating daily master totals", e)
+                emptyMap()
+            }
+        }
     }
 
     // ── Internal Helpers ──────────────────────────────────────────────

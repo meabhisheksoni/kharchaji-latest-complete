@@ -23,6 +23,10 @@ class PaymentMonitorService : AccessibilityService() {
     // Prevent duplicate triggers: Store recent transaction references
     private val processedTransactions = mutableSetOf<String>()
     
+    // Smart Close tracking
+    private var lastForegroundPackage: String? = null
+    private var reachedPaymentStage: Boolean = false
+    
     // ── Per-app parsers (each app gets its own file) ──
     private val bhimParser = BhimUpiPaymentParser()
 
@@ -109,10 +113,27 @@ class PaymentMonitorService : AccessibilityService() {
         if (!isMonitorEnabled) return
 
         val eventPackage = event?.packageName?.toString() ?: ""
-        if (eventPackage != "net.one97.paytm" && 
-            eventPackage != "com.google.android.apps.nbu.paisa.user" &&
-            eventPackage != "com.phonepe.app" &&
-            eventPackage != "in.org.npci.upiapp") {
+        val isUpiApp = eventPackage in listOf("net.one97.paytm", "com.google.android.apps.nbu.paisa.user", "com.phonepe.app", "in.org.npci.upiapp")
+
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            if (isUpiApp) {
+                lastForegroundPackage = eventPackage
+            } else if (lastForegroundPackage != null && eventPackage != "com.example.monday" && eventPackage != "com.android.systemui") {
+                // User switched away from UPI app
+                if (reachedPaymentStage) {
+                    val popupIntent = Intent(this, WidgetInputActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        putExtra("is_forced", false) 
+                        putExtra("amount", "")
+                    }
+                    startActivity(popupIntent)
+                }
+                lastForegroundPackage = null
+                reachedPaymentStage = false
+            }
+        }
+
+        if (!isUpiApp) {
             return
         }
 
@@ -199,6 +220,13 @@ class PaymentMonitorService : AccessibilityService() {
 
         traverseNode(rootNode)
         rootNode.recycle()
+
+        if (isPrePaymentScreen) {
+            reachedPaymentStage = true
+            // SRE: Ignore amounts found on the "Pay Securely" screen, they are often balances or historic
+            // We wait for the actual success screen.
+            return
+        }
 
         if (isPrePaymentScreen || isHistoryScreen) return
 

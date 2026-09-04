@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -196,7 +197,7 @@ fun ModernExpenseListScreen(
                                 )
                                 Text(
                                     text = "Premium Account",
-                                    color = C.EggnogLight,
+                                    color = C.EggnogDark.copy(alpha = 0.85f),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -207,21 +208,21 @@ fun ModernExpenseListScreen(
                         // Search -> All Expenses
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
-                                .background(C.SoftCream, RoundedCornerShape(12.dp))
-                                .border(1.dp, C.CardBorder, RoundedCornerShape(12.dp))
+                                .size(38.dp)
+                                .background(C.SoftCream, RoundedCornerShape(10.dp))
+                                .border(1.dp, C.CardBorder, RoundedCornerShape(10.dp))
                                 .clickable { onAllExpensesClick() },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Search, contentDescription = "Search", tint = C.EggnogLight, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Search, contentDescription = "Search", tint = C.EggnogDark, modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         // Bell Notification
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
-                                .background(C.SoftCream, RoundedCornerShape(12.dp))
-                                .border(1.dp, C.CardBorder, RoundedCornerShape(12.dp))
+                                .size(38.dp)
+                                .background(C.SoftCream, RoundedCornerShape(10.dp))
+                                .border(1.dp, C.CardBorder, RoundedCornerShape(10.dp))
                                 .clickable { Toast.makeText(context, "No new notifications", Toast.LENGTH_SHORT).show() },
                             contentAlignment = Alignment.Center
                         ) {
@@ -239,6 +240,13 @@ fun ModernExpenseListScreen(
                     .padding(top = paddingValues.calculateTopPadding())
                     .background(C.Eggshell)
             ) {
+                // Subtle hairline border separating top bar from eggshell body
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(C.CardBorder.copy(alpha = 0.4f))
+                )
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -262,7 +270,7 @@ fun ModernExpenseListScreen(
                     item(key = "divider") {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp).height(1.dp)
+                                .fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).height(1.dp)
                                 .background(Brush.horizontalGradient(listOf(Color.Transparent, C.EggnogLight.copy(alpha = 0.3f), Color.Transparent)))
                         )
                     }
@@ -330,17 +338,31 @@ fun ModernExpenseListScreen(
                         }
 
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("${totalItemsCount} TRANSACTION${if (totalItemsCount != 1) "S" else ""}", color = C.EggnogLight, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp)
+                            Text(
+                                "${totalItemsCount} TRANSACTION${if (totalItemsCount != 1) "S" else ""}",
+                                color = C.EggnogDark.copy(alpha = 0.85f),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.8.sp
+                            )
 
-                            // Circular "Select for Export" checkbox
+                            // Circular "Select for Export" checkbox pill
                             androidx.compose.foundation.layout.Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                                    .background(
+                                        if (dateIsInBuffer) C.Groceries.copy(alpha = 0.12f) else C.SoftCream
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (dateIsInBuffer) C.Groceries.copy(alpha = 0.35f) else C.CardBorder,
+                                        androidx.compose.foundation.shape.RoundedCornerShape(50)
+                                    )
                                     .clickable {
                                         if (dateIsInBuffer) {
                                             // Already buffered → remove from buffer (explicit opt-out)
@@ -352,34 +374,34 @@ fun ModernExpenseListScreen(
                                             }
                                         }
                                     }
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
                             ) {
                                 // Circular checkbox icon
                                 Box(
                                     modifier = Modifier
-                                        .size(18.dp)
+                                        .size(16.dp)
                                         .background(
                                             if (dateIsInBuffer) C.Groceries else Color.Transparent,
                                             shape = androidx.compose.foundation.shape.CircleShape
                                         )
                                         .border(
                                             1.5.dp,
-                                            if (dateIsInBuffer) C.Groceries else C.EggnogLight,
+                                            if (dateIsInBuffer) C.Groceries else C.CardBorder,
                                             shape = androidx.compose.foundation.shape.CircleShape
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (dateIsInBuffer) {
-                                        Text("✓", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text("✓", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(5.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 // Show item count when buffered
                                 val bufferedCount = exportBuf[selectedDate]?.size ?: 0
                                 Text(
                                     if (dateIsInBuffer) "Buffered ($bufferedCount)" else "Export",
-                                    color = if (dateIsInBuffer) C.Groceries else C.EggnogLight,
-                                    fontSize = 10.sp,
+                                    color = if (dateIsInBuffer) C.Groceries else C.EggnogDark,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -388,12 +410,26 @@ fun ModernExpenseListScreen(
 
                     if (itemsForSelectedDate.isEmpty()) {
                         item(key = "empty") {
-                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("🌅", fontSize = 48.sp)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text("No Expenses Found", color = C.EggnogDark, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(68.dp)
+                                        .clip(CircleShape)
+                                        .background(C.SoftCream)
+                                        .border(1.dp, C.CardBorder, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ReceiptLong,
+                                        contentDescription = null,
+                                        tint = C.EggnogDark,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Text("No Expenses Found", color = C.EggnogDark, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.height(6.dp))
-                                Text("Tap + to log your first expense", color = C.EggnogLight, fontSize = 13.sp)
+                                Text("Tap + below to log your first expense", color = C.EggnogDark.copy(alpha = 0.75f), fontSize = 13.sp)
                             }
                         }
                     } else {

@@ -1,17 +1,21 @@
 package com.example.monday.ui.screens
-import com.example.monday.core.utils.*
-import com.example.monday.data.models.TodoItem
 
-import androidx.compose.foundation.background
+import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -20,10 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,173 +33,277 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.monday.TodoViewModel
-import kotlinx.coroutines.flow.collect
-import java.time.DayOfWeek
+import com.example.monday.core.utils.SpendTier
+import com.example.monday.core.utils.calculateMonthSpendRange
+import com.example.monday.core.utils.formatCompactAmount
+import com.example.monday.ui.modern.ModernColors
+import com.example.monday.viewmodels.StatsViewModel
+import kotlinx.coroutines.CancellationException
+import java.text.DecimalFormat
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
-import java.text.DecimalFormat
 
 @Composable
 fun ExpenseCalendarDialog(
     selectedDate: LocalDate,
     onDismiss: () -> Unit,
     onDateSelected: (LocalDate) -> Unit,
-    todoViewModel: TodoViewModel, statsViewModel: com.example.monday.viewmodels.StatsViewModel
+    @Suppress("UNUSED_PARAMETER") todoViewModel: TodoViewModel,
+    statsViewModel: StatsViewModel
 ) {
     var currentYearMonth by remember { mutableStateOf(YearMonth.from(selectedDate)) }
-    
+    var masterTotalsMap by remember(currentYearMonth) { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var monthlyTotal by remember(currentYearMonth) { mutableStateOf(0.0) }
+    var showMediumRange by remember { mutableStateOf(false) }
+
+    // Adaptive 3-tier dynamic spending classification
+    val spendRangeConfig = remember(masterTotalsMap) {
+        calculateMonthSpendRange(masterTotalsMap)
+    }
+
+    // Cancellation-aware data fetching
+    LaunchedEffect(currentYearMonth) {
+        try {
+            val totals = statsViewModel.getMasterRecordDailyTotalsForMonth(currentYearMonth)
+            masterTotalsMap = totals
+            monthlyTotal = totals.values.sum()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("ExpenseCalendarDialog", "Error loading daily totals for $currentYearMonth", e)
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Card(
+        // Scrim Container: Full screen with tap-to-dismiss
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.9f),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onDismiss() }
+                .padding(horizontal = 4.dp, vertical = 24.dp), // Negligible 4dp padding: edge-to-edge while showing curves
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            // Calendar Card: Consumes touches to prevent dismissing when clicking inside
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .wrapContentHeight()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        enabled = true
+                    ) { /* Intentionally empty: consume touch within card */ },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(1.dp, ModernColors.CardBorder.copy(alpha = 0.3f))
             ) {
-                // Month navigation header
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .wrapContentHeight()
+                        .padding(horizontal = 6.dp, vertical = 12.dp)
                 ) {
-                    IconButton(
-                        onClick = {
-                            currentYearMonth = currentYearMonth.minusMonths(1)
-                        }
+                    // Header: Month Navigation + Deduplicated Monthly Total Spend
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Previous Month",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                    
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = currentYearMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        
-                        // Monthly total - sum of all daily master records
-                        var monthlyTotal by remember(currentYearMonth) { mutableStateOf(0.0) }
-                        
-                        LaunchedEffect(currentYearMonth, todoViewModel) {
-                            val startOfMonthMillis = currentYearMonth.atDay(1)
-                                .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
-                            val endOfMonthMillis = currentYearMonth.atEndOfMonth()
-                                .plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
-                            
-                            // Get all master records for this month
-                            val masterRecords = statsViewModel.getMasterRecordsForMonth(startOfMonthMillis, endOfMonthMillis)
-                            
-                            // Sum up the totalSum from each master record (one per day)
-                            monthlyTotal = masterRecords.sumOf { it.totalSum }
-                        }
-                        
-                        if (monthlyTotal > 0) {
-                            Text(
-                                text = formatIndianCurrency(monthlyTotal),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                    
-                    IconButton(
-                        onClick = {
-                            currentYearMonth = currentYearMonth.plusMonths(1)
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight, 
-                            contentDescription = "Next Month",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
-                
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    thickness = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
-                
-                // Day of week header with borders
-                val daysOfWeek = listOf("S", "M", "T", "W", "T", "F", "S")
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    for (dayLabel in daysOfWeek) {
-                        Box(
+                        Surface(
                             modifier = Modifier
-                                .weight(1f)
-                                .border(0.5.dp, Color.LightGray),
-                            contentAlignment = Alignment.Center
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { currentYearMonth = currentYearMonth.minusMonths(1) },
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, ModernColors.CardBorder.copy(alpha = 0.4f))
                         ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Previous Month",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = currentYearMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (monthlyTotal > 0) {
+                                Text(
+                                    text = "Total: ${formatIndianCurrency(monthlyTotal)}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = ModernColors.EggnogDark,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { currentYearMonth = currentYearMonth.plusMonths(1) },
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, ModernColors.CardBorder.copy(alpha = 0.4f))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Next Month",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = ModernColors.CardBorder.copy(alpha = 0.25f),
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
+
+                    // Weekday Headers (Sunday -> Saturday)
+                    val daysOfWeek = listOf("S", "M", "T", "W", "T", "F", "S")
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        for (dayLabel in daysOfWeek) {
                             Text(
                                 text = dayLabel,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(vertical = 8.dp)
+                                style = MaterialTheme.typography.labelMedium,
+                                color = ModernColors.EggnogDark,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(vertical = 4.dp)
                             )
                         }
                     }
-                }
-                
-                // Calendar days grid with borders
-                val firstDayOfMonth = currentYearMonth.atDay(1)
-                val daysInMonth = currentYearMonth.lengthOfMonth()
-                val firstDayOfWeekIndex = (firstDayOfMonth.dayOfWeek.value % 7)
-                
-                val totalDays = firstDayOfWeekIndex + daysInMonth
-                val totalRows = (totalDays + 6) / 7
-                
-                for (row in 0 until totalRows) {
-                    Row(
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Calendar Grid with tight content wrapping
+                    val firstDayOfMonth = currentYearMonth.atDay(1)
+                    val daysInMonth = currentYearMonth.lengthOfMonth()
+                    val firstDayOfWeekIndex = (firstDayOfMonth.dayOfWeek.value % 7)
+                    val totalDays = firstDayOfWeekIndex + daysInMonth
+                    val totalRows = (totalDays + 6) / 7
+
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(85.dp) // Increased height to match reference image
+                            .wrapContentHeight()
                     ) {
-                        for (column in 0 until 7) {
-                            val day = row * 7 + column - firstDayOfWeekIndex + 1
-                            if (day in 1..daysInMonth) {
-                                val date = currentYearMonth.atDay(day)
-                                val isSelected = date == selectedDate
-                                
-                                // Each cell with border
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight() // Fill the full row height
-                                        .border(0.5.dp, Color.LightGray)
-                                ) {
-                                    MonthDayCell(
-                                        date = date,
-                                        isSelected = isSelected,
-                                        todoViewModel = todoViewModel, statsViewModel = statsViewModel,
-                                        onClick = { onDateSelected(date) }
-                                    )
+                        for (row in 0 until totalRows) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(54.dp)
+                            ) {
+                                for (column in 0 until 7) {
+                                    val day = row * 7 + column - firstDayOfWeekIndex + 1
+                                    if (day in 1..daysInMonth) {
+                                        val date = currentYearMonth.atDay(day)
+                                        val isSelected = date == selectedDate
+                                        val isToday = date == LocalDate.now()
+                                        val total = masterTotalsMap[date.toString()]
+                                        val tier = if (total != null && total > 0) {
+                                            spendRangeConfig.getTier(total)
+                                        } else {
+                                            SpendTier.NONE
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                                .padding(1.dp)
+                                        ) {
+                                            MonthDayCell(
+                                                date = date,
+                                                isSelected = isSelected,
+                                                isToday = isToday,
+                                                dailyTotal = total,
+                                                spendTier = tier,
+                                                onClick = { onDateSelected(date) }
+                                            )
+                                        }
+                                    } else {
+                                        Spacer(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                        )
+                                    }
                                 }
-                            } else {
-                                // Empty cell with border
-                                Spacer(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight() // Fill the full row height
-                                        .border(0.5.dp, Color.LightGray)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Bottom Row: Small Triangle/Triad Toggle Button for Medium Range
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { showMediumRange = !showMediumRange }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = Color.Transparent
+                        ) {
+                            // 3-dot triangle / triad arrangement
+                            TriadDotsIndicator(
+                                isExpanded = showMediumRange,
+                                color = ModernColors.EggnogDark
+                            )
+                        }
+
+                        // Expandable Moderate Spend Range Pill
+                        AnimatedVisibility(
+                            visible = showMediumRange,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            val lowFormatted = formatCompactAmount(spendRangeConfig.lowThreshold)
+                            val highFormatted = formatCompactAmount(spendRangeConfig.highThreshold)
+                            
+                            Surface(
+                                modifier = Modifier
+                                    .padding(top = 4.dp)
+                                    .clip(RoundedCornerShape(6.dp)),
+                                color = Color(0xFFFFA726).copy(alpha = 0.14f),
+                                border = BorderStroke(0.5.dp, Color(0xFFFFA726).copy(alpha = 0.40f)),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = "Moderate Spend: $lowFormatted – $highFormatted",
+                                    color = Color(0xFFE65100),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    textAlign = TextAlign.Center
                                 )
                             }
                         }
@@ -213,111 +318,164 @@ fun ExpenseCalendarDialog(
 private fun MonthDayCell(
     date: LocalDate,
     isSelected: Boolean,
-    todoViewModel: TodoViewModel, statsViewModel: com.example.monday.viewmodels.StatsViewModel,
+    isToday: Boolean,
+    dailyTotal: Double?,
+    spendTier: SpendTier,
     onClick: () -> Unit
 ) {
-    var dailyTotal by remember(date) { mutableStateOf<Double?>(null) }
+    // Cell background stays clean and un-flooded
+    val cellBackgroundColor = when {
+        isToday -> ModernColors.TodayButton.copy(alpha = 0.08f)
+        else -> Color.Transparent
+    }
 
-    LaunchedEffect(date, todoViewModel) {
-        // First try to get a master record for this date specifically
-        statsViewModel.getMasterRecordForDate(date).collect { masterRecord ->
-            if (masterRecord != null) {
-                // If a master record exists, use its total
-                dailyTotal = masterRecord.totalSum
-            } else {
-                // Fall back to the old method if no master record found
-                statsViewModel.getCalculationRecordsForDate(date).collect { records ->
-                    // Filter for master records first
-                    val masterRecords = records.filter { it.isMasterSave }
-                    
-                    // Use master record if available, otherwise use the highest ID normal record
-                    dailyTotal = if (masterRecords.isNotEmpty()) {
-                        masterRecords.maxByOrNull { it.timestamp }?.totalSum
-                    } else if (records.isNotEmpty()) {
-                        records.maxByOrNull { it.id }?.totalSum
-                    } else {
-                        null
-                    }
+    // Outline border only for today or subtle card border (no blue tile flood)
+    val borderStroke = when {
+        isToday -> BorderStroke(1.2.dp, ModernColors.TodayButton)
+        else -> BorderStroke(0.5.dp, ModernColors.CardBorder.copy(alpha = 0.20f))
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(6.dp),
+        color = cellBackgroundColor,
+        border = borderStroke
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 3.dp, horizontal = 1.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Date number: Selected state applies a neat rectangular highlight to the date text ONLY
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(ModernColors.DateSelected)
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = date.dayOfMonth.toString(),
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontSize = 11.5.sp,
+                        lineHeight = 13.sp
+                    )
                 }
+            } else {
+                Box(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = date.dayOfMonth.toString(),
+                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isToday) ModernColors.EggnogDark else MaterialTheme.colorScheme.onSurface,
+                        fontSize = 11.5.sp,
+                        lineHeight = 13.sp
+                    )
+                }
+            }
+
+            // Spending amount badge: strictly preserves Green / Mild Orange / Red tier badge
+            if (dailyTotal != null && dailyTotal > 0) {
+                val (badgeBg, badgeBorder, badgeText) = when (spendTier) {
+                    SpendTier.LOW -> Triple(
+                        Color(0xFF43A047).copy(alpha = 0.15f), // Green
+                        Color(0xFF43A047).copy(alpha = 0.40f),
+                        Color(0xFF2E7D32)
+                    )
+                    SpendTier.MEDIUM -> Triple(
+                        Color(0xFFFFA726).copy(alpha = 0.18f), // Mild Orange
+                        Color(0xFFFFA726).copy(alpha = 0.45f),
+                        Color(0xFFE65100)
+                    )
+                    SpendTier.HIGH -> Triple(
+                        Color(0xFFE53935).copy(alpha = 0.15f), // Red
+                        Color(0xFFE53935).copy(alpha = 0.40f),
+                        Color(0xFFD32F2F)
+                    )
+                    SpendTier.NONE -> Triple(
+                        Color.Transparent,
+                        Color.Transparent,
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 1.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(badgeBg)
+                        .border(0.5.dp, badgeBorder, RoundedCornerShape(3.dp))
+                        .padding(vertical = 1.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = formatCompactAmount(dailyTotal),
+                        color = badgeText,
+                        fontSize = 9.sp,
+                        lineHeight = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.height(14.dp))
             }
         }
     }
+}
 
-    val isToday = date == LocalDate.now()
-    
-    val backgroundColor = when {
-        isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-        isToday -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f)
-        else -> Color.Transparent
-    }
-    
-    Box(
-        modifier = Modifier
-            .fillMaxSize() // Fill the parent Box that has the border
-            .padding(1.dp)
-            .background(backgroundColor)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center // Center the content in the cell
+/**
+ * Tactical 3-dot triangle indicator button:
+ * Top: 1 dot
+ * Bottom: 2 dots
+ */
+@Composable
+private fun TriadDotsIndicator(
+    isExpanded: Boolean,
+    color: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        // Date aligned to top center with much more top padding
-        Text(
-            text = date.dayOfMonth.toString(),
-            fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
-            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-            fontSize = 16.sp,
+        // Top dot
+        Box(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 16.dp) // Much more top padding to match reference
+                .size(4.dp)
+                .clip(CircleShape)
+                .background(if (isExpanded) Color(0xFFFFA726) else color.copy(alpha = 0.6f))
         )
-        
-        // Amount aligned to bottom center with much more bottom padding
-        if (dailyTotal != null && dailyTotal!! > 0) {
-            val amountText = formatIndianCurrency(dailyTotal!!)
-            var textSize by remember { mutableStateOf(7.sp) }
-            var readyToDraw by remember { mutableStateOf(false) }
-            
-            // Better balance between readability and fitting large numbers
-            val initialSize = when {
-                amountText.length <= 5 -> 13.sp  // Small amounts (₹123)
-                amountText.length <= 7 -> 11.sp  // Medium (₹12,345)
-                amountText.length <= 9 -> 9.sp   // Large (₹12,34,567)
-                amountText.length <= 11 -> 8.sp  // Very large (₹1,23,45,678)
-                else -> 7.sp                     // Extremely large (₹99,99,99,999)
-            }
-            
-            textSize = initialSize
-            
-            Text(
-                text = amountText,
-                color = Color(0xFFD32F2F),
-                fontSize = textSize,
-                fontWeight = FontWeight.Normal,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                letterSpacing = (-0.03).sp,
+        // Bottom two dots
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 0.5.dp)
-                    .padding(bottom = 16.dp) // Much more bottom padding to match reference
-                    .drawWithContent {
-                        if (readyToDraw) drawContent()
-                    },
-                onTextLayout = { textLayoutResult ->
-                    if (textLayoutResult.didOverflowWidth) {
-                        // Continue with aggressive reduction
-                        textSize = textSize * 0.8f
-                    } else {
-                        readyToDraw = true
-                    }
-                }
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(if (isExpanded) Color(0xFFFFA726) else color.copy(alpha = 0.6f))
+            )
+            Box(
+                modifier = Modifier
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(if (isExpanded) Color(0xFFFFA726) else color.copy(alpha = 0.6f))
             )
         }
     }
 }
 
 private fun formatIndianCurrency(amount: Double): String {
-    // Format large Indian numbers with proper comma placement for lakhs and crores
-    val formatter = DecimalFormat("₹#,##,##,##0")
-    return formatter.format(amount.toInt()) // Converting to int to avoid decimal places
-} 
+    val formatter = DecimalFormat("₹#,##,##0")
+    return formatter.format(amount.toInt())
+}

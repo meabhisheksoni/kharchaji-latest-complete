@@ -28,6 +28,9 @@
     
     <!-- Vibration permission for payment monitor -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    
+    <!-- Audio permission for voice expense recognition -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:name=".KharchajiApplication"
@@ -39,12 +42,14 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Kharchaji"
+        android:enableOnBackInvokedCallback="true"
         tools:targetApi="31">
         
         <!-- Splash Activity -->
         <activity
             android:name=".SplashActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.Kharchaji.SplashScreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -56,6 +61,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Kharchaji" />
 
@@ -97,6 +103,7 @@
         <activity
             android:name=".widget.ExpenseWidgetActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.Kharchaji"
             android:taskAffinity=""
             android:excludeFromRecents="true" />
@@ -123,6 +130,7 @@
         <activity
             android:name=".widget.WidgetInputActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:taskAffinity=""
             android:excludeFromRecents="true" />
@@ -131,6 +139,16 @@
         <activity
             android:name=".ui.cart.CartBatchPopupActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:taskAffinity=""
+            android:excludeFromRecents="true" />
+
+        <!-- Voice Expense Quick Popup Activity -->
+        <activity
+            android:name=".ui.voice.VoiceExpenseActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:taskAffinity=""
             android:excludeFromRecents="true" />
@@ -149,6 +167,7 @@
         <activity
             android:name=".ui.overlay.OverlayPermissionActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.Kharchaji" />
 
         <!-- Boot Receiver for auto-starting overlay -->

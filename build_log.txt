@@ -1,6 +1,7 @@
+Configuration on demand is an incubating feature.
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preDebugBuild UP-TO-DATE
-> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
 > Task :app:checkDebugAarMetadata UP-TO-DATE
 > Task :app:generateDebugResValues UP-TO-DATE
 > Task :app:mapDebugSourceSetPaths UP-TO-DATE
@@ -26,22 +27,14 @@
 > Task :app:mergeExtDexDebug UP-TO-DATE
 > Task :app:mergeLibDexDebug UP-TO-DATE
 > Task :app:mergeDebugJniLibFolders UP-TO-DATE
-> Task :app:mergeDebugNativeLibs NO-SOURCE
-> Task :app:stripDebugDebugSymbols NO-SOURCE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
 > Task :app:validateSigningDebug UP-TO-DATE
 > Task :app:writeDebugAppMetadata UP-TO-DATE
 > Task :app:writeDebugSigningConfigVersions UP-TO-DATE
 
-> Task :app:compileDebugKotlin
-e: file:///E:/priya/kharchaji/app/src/main/java/com/example/monday/CalculationRecordsScreen.kt:119:109 Smart cast to 'CalculationRecord' is impossible, because 'record' is a property that has open or custom getter
-e: file:///E:/priya/kharchaji/app/src/main/java/com/example/monday/CalculationRecordsScreen.kt:121:63 Smart cast to 'CalculationRecord' is impossible, because 'record' is a property that has open or custom getter
-e: file:///E:/priya/kharchaji/app/src/main/java/com/example/monday/CalculationRecordsScreen.kt:122:44 Smart cast to 'CalculationRecord' is impossible, because 'record' is a property that has open or custom getter
-e: file:///E:/priya/kharchaji/app/src/main/java/com/example/monday/CalculationRecordsScreen.kt:122:101 Smart cast to 'CalculationRecord' is impossible, because 'record' is a property that has open or custom getter
-e: file:///E:/priya/kharchaji/app/src/main/java/com/example/monday/CalculationRecordsScreen.kt:126:23 Smart cast to 'CalculationRecord' is impossible, because 'record' is a property that has open or custom getter
-e: file:///E:/priya/kharchaji/app/src/main/java/com/example/monday/CalculationRecordsScreen.kt:126:56 Smart cast to 'CalculationRecord' is impossible, because 'record' is a property that has open or custom getter
-e: file:///E:/priya/kharchaji/app/src/main/java/com/example/monday/CalculationRecordsScreen.kt:132:71 Smart cast to 'CalculationRecord' is impossible, because 'record' is a property that has open or custom getter
-
 > Task :app:compileDebugKotlin FAILED
+e: file:///E:/BACKup%20of%20soft/kharcha%20overlay%20and%20automation%20work%201/OVERLAY%20AND%20WORKING%20FULL/latest_kharchaji-/app/src/main/java/com/example/monday/ui/components/DateSummary.kt:57:17 Unresolved reference 'background'.
 
 FAILURE: Build failed with an exception.
 
@@ -56,11 +49,5 @@ Execution failed for task ':app:compileDebugKotlin'.
 > Run with --scan to get full insights.
 > Get more help at https://help.gradle.org.
 
-Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
-
-You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
-
-For more on this, please refer to https://docs.gradle.org/8.10.2/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
-
 BUILD FAILED in 6s
-26 actionable tasks: 1 executed, 25 up-to-date
+29 actionable tasks: 1 executed, 28 up-to-date

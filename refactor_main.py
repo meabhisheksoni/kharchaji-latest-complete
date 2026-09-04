@@ -1,130 +1,20 @@
-package com.example.monday
+import re
 
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.monday.viewmodels.MainViewModel
-import com.example.monday.viewmodels.SettingsViewModel
-import android.content.Context
-import android.content.Intent
-import android.os.Bundle
-import android.util.Log
-import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Analytics
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.monday.ui.theme.KharchajiTheme
-import com.example.monday.ui.overlay.OverlayHelper
-import com.example.monday.core.utils.*
-import com.example.monday.data.models.TodoItem
-import com.example.monday.ModernExpenseListScreen
-import com.example.monday.StatisticsScreen
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.BugReport
-import androidx.navigation3.ui.NavDisplay
-import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.scene.DialogSceneStrategy
-import com.example.monday.core.navigation.*
-import java.time.LocalDate
-import com.example.monday.ui.screens.BatchSaveScreen
-import kotlinx.coroutines.launch
-import java.time.ZoneId
-import java.time.Instant
-import kotlinx.coroutines.CoroutineScope
-import com.example.monday.ui.screens.SettingsScreen
-import com.example.monday.AllExpensesScreen
-import com.example.monday.FindAndReplaceScreen
-import com.example.monday.MonthlyReportScreen
-import com.example.monday.CategoryFilterScreen
-import android.os.Build
-import androidx.annotation.RequiresApi
-import androidx.activity.enableEdgeToEdge
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import com.example.monday.ui.screens.MasterOnlyCategoriesScreen
-import com.example.monday.ui.screens.MasterCategoryDetailScreen
-import com.example.monday.ui.modern.ModernColors
+with open("app/src/main/java/com/example/monday/MainActivity.kt", "r", encoding="utf-8") as f:
+    content = f.read()
 
-import android.content.pm.ActivityInfo
-import dagger.hilt.android.AndroidEntryPoint
+parts = content.split("@RequiresApi(Build.VERSION_CODES.O)\n@OptIn(ExperimentalMaterial3Api::class)\n@Composable\nfun TodoApp(")
+before = parts[0]
 
-@AndroidEntryPoint
-class MainActivity : ComponentActivity() {
-    @RequiresApi(Build.VERSION_CODES.O)
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        
-        // Lock orientation to portrait so the application won't rotate
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+after_parts = parts[1].split("@RequiresApi(Build.VERSION_CODES.O)\n@Preview(showBackground = true)\n@Composable\nfun DefaultPreview()")
+after = "@RequiresApi(Build.VERSION_CODES.O)\n@Preview(showBackground = true)\n@Composable\nfun DefaultPreview()" + after_parts[1]
 
-        // Ensure edge-to-edge behavior to use the full mobile screen size
-        enableEdgeToEdge()
-        
-        // Auto-start overlay service
-        OverlayHelper.startOverlayService(this)
-        
-        setContent {
-            KharchajiTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    TodoApp()
-                }
-            }
-        }
-    }
-}
-
-
-
-@RequiresApi(Build.VERSION_CODES.O)
+todo_app_new = """@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodoApp(
     todoViewModel: TodoViewModel = hiltViewModel(),
-    mainViewModel: MainViewModel = hiltViewModel(),
+    expenseViewModel: ExpenseViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     exportViewModel: com.example.monday.viewmodels.ExportViewModel = hiltViewModel(),
     statsViewModel: com.example.monday.viewmodels.StatsViewModel = hiltViewModel()
@@ -132,14 +22,14 @@ fun TodoApp(
     val topLevelRoutes = setOf(ExpenseListRoute, StatisticsRoute, ShareScreenRoute, SettingsScreenRoute)
     val navigationState = rememberNavigationState(startRoute = ExpenseListRoute, topLevelRoutes = topLevelRoutes)
     val navigator = Navigator(navigationState)
-    val currentRoute = navigationState.backStacks[navigationState.topLevelRoute]?.lastOrNull() ?: navigationState.topLevelRoute
+    val currentRoute = navigationState.topLevelRoute
 
     val myEntryProvider = entryProvider {
         entry<ExpenseListRoute> {
             ModernExpenseListScreen(
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
-exportViewModel = exportViewModel,
+                expenseViewModel = expenseViewModel,
+                exportViewModel = exportViewModel,
                 statsViewModel = statsViewModel,
                 settingsViewModel = settingsViewModel,
                 onShareClick = {
@@ -148,7 +38,7 @@ exportViewModel = exportViewModel,
                 onNavigateToBatchSave = { navigator.navigate(BatchSaveScreenRoute) },
                 onNavigateToSettings = { navigator.navigate(SettingsScreenRoute) },
                 onViewRecordsClick = { 
-                    val currentSelectedDateMillis = mainViewModel.selectedDate.value.toEpochMilli()
+                    val currentSelectedDateMillis = todoViewModel.selectedDate.value.toEpochMilli()
                     navigator.navigate(CalculationRecordsRoute(currentSelectedDateMillis))
                 },
                 onAllExpensesClick = {
@@ -158,8 +48,8 @@ exportViewModel = exportViewModel,
         }
         entry<AddExpenseRoute> {
             AddNewExpenseScreenV2(
-                onNextClick = { navigator.goBack() },
-                todoViewModel = todoViewModel
+                expenseViewModel = expenseViewModel,
+                onNextClick = { navigator.goBack() }
             )
         }
         entry<StatisticsRoute> {
@@ -181,13 +71,13 @@ exportViewModel = exportViewModel,
                 }
             )
         }
-        entry<ShareScreenRoute> {
-            val currentSelectedDate by mainViewModel.selectedDate.collectAsState()
+        entry<ShareScreenRoute>(DialogSceneStrategy) {
+            val currentSelectedDate by todoViewModel.selectedDate.collectAsState()
             ShareScreen(
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
-                statsViewModel = statsViewModel,
+                expenseViewModel = expenseViewModel,
                 exportViewModel = exportViewModel,
+                statsViewModel = statsViewModel,
                 currentSelectedDate = currentSelectedDate,
                 onDismiss = { navigator.goBack() }
             )
@@ -197,8 +87,7 @@ exportViewModel = exportViewModel,
             
             CalculationRecordsScreen(
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
-statsViewModel = statsViewModel,
+                statsViewModel = statsViewModel,
                 displayDate = recordDate,
                 onNavigateBack = { navigator.goBack() },
                 onRecordClick = { recordId ->
@@ -213,8 +102,7 @@ statsViewModel = statsViewModel,
             CalculationRecordDetailScreen(
                 recordId = key.recordId,
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
-statsViewModel = statsViewModel,
+                statsViewModel = statsViewModel,
                 onNavigateBack = { navigator.goBack() },
                 onSetMemoAndReturnToExpenses = {
                     navigator.navigate(ExpenseListRoute)
@@ -233,7 +121,6 @@ statsViewModel = statsViewModel,
         entry<BatchSaveScreenRoute> {
             BatchSaveScreen(
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
                 statsViewModel = statsViewModel,
                 onNavigateBack = { navigator.goBack() }
             )
@@ -241,7 +128,6 @@ statsViewModel = statsViewModel,
         entry<SettingsScreenRoute> {
             SettingsScreen(
                 viewModel = todoViewModel,
-                mainViewModel = mainViewModel,
                 statsViewModel = statsViewModel,
                 onNavigateBack = { navigator.goBack() }
             )
@@ -249,7 +135,6 @@ statsViewModel = statsViewModel,
         entry<AllExpensesRoute> {
             AllExpensesScreen(
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
                 statsViewModel = statsViewModel,
                 onNavigateBack = { navigator.goBack() }
             )
@@ -257,22 +142,19 @@ statsViewModel = statsViewModel,
         entry<TrendsRoute> {
             TrendsScreen(
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
-onNavigateBack = { navigator.goBack() }
+                onNavigateBack = { navigator.goBack() }
             )
         }
         entry<FindAndReplaceRoute> {
             FindAndReplaceScreen(
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
                 onNavigateBack = { navigator.goBack() }
             )
         }
         entry<MonthlyReportRoute> {
             MonthlyReportScreen(
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
-statsViewModel = statsViewModel,
+                statsViewModel = statsViewModel,
                 onNavigateBack = { navigator.goBack() },
                 onNavigateToFilter = {
                     navigator.navigate(CategoryFilterRoute)
@@ -283,7 +165,6 @@ statsViewModel = statsViewModel,
         entry<CategoryFilterRoute> {
             CategoryFilterScreen(
                 todoViewModel = todoViewModel,
-                mainViewModel = mainViewModel,
                 onNavigateBack = { navigator.goBack() },
                 initialSelectedCategories = emptyList(),
                 onApplyFilters = { filters ->
@@ -294,7 +175,6 @@ statsViewModel = statsViewModel,
         entry<MasterOnlyCategoriesRoute> {
             MasterOnlyCategoriesScreen(
                 viewModel = todoViewModel,
-                mainViewModel = mainViewModel,
                 onNavigateBack = { navigator.goBack() },
                 onCategoryClick = { category ->
                     navigator.navigate(MasterCategoryDetailRoute(category))
@@ -451,18 +331,17 @@ statsViewModel = statsViewModel,
 
     ) { innerPadding ->
         NavDisplay(
-            entries = navigationState.toEntries(myEntryProvider),
+            backstacks = navigationState.toEntries(myEntryProvider),
             modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
-            onBack = { navigator.goBack() },
-            sceneStrategy = DialogSceneStrategy()
+            onBack = { navigator.goBack() }
         )
     }
 }
-@RequiresApi(Build.VERSION_CODES.O)
-@Preview(showBackground = true)
-@Composable
-fun DefaultPreview() {
-    KharchajiTheme {
-        TodoApp()
-    }
-}
+"""
+
+new_content = before + todo_app_new + after
+
+with open("app/src/main/java/com/example/monday/MainActivity.kt", "w", encoding="utf-8") as f:
+    f.write(new_content)
+
+print("Done")

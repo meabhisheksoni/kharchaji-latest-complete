@@ -141,3 +141,72 @@ fun formatIndianCurrency(amount: Int): String {
     val result = format.format(amount)
     return result.replace("â‚¹", "").replace("₹", "").trim()
 }
+
+fun formatCompactAmount(amount: Double): String {
+    return when {
+        amount >= 10_000_000 -> "₹%.1fCr".format(amount / 10_000_000).replace(".0Cr", "Cr")
+        amount >= 100_000 -> "₹%.1fL".format(amount / 100_000).replace(".0L", "L")
+        amount >= 1_000 -> "₹%.1fk".format(amount / 1_000).replace(".0k", "k")
+        else -> "₹%.0f".format(amount)
+    }
+}
+
+enum class SpendTier {
+    NONE,
+    LOW,
+    MEDIUM,
+    HIGH
+}
+
+data class SpendRangeConfig(
+    val lowThreshold: Double,
+    val highThreshold: Double
+) {
+    fun getTier(amount: Double): SpendTier {
+        return when {
+            amount <= 0.0 -> SpendTier.NONE
+            amount <= lowThreshold -> SpendTier.LOW
+            amount <= highThreshold -> SpendTier.MEDIUM
+            else -> SpendTier.HIGH
+        }
+    }
+}
+
+/**
+ * Calculates adaptive dynamic spend tiers anchored directly around the month's
+ * true average daily spend:
+ * - Low (Green): < 50% of Average (routine, minor daily expenses)
+ * - Moderate (Mild Orange): 50% - 150% of Average (typical daily expenses)
+ * - High (Red): > 150% of Average (major / peak expenses)
+ *
+ * Robust outlier dampening ensures single massive test transactions
+ * do not skew the baseline daily average.
+ */
+fun calculateMonthSpendRange(dailyTotals: Map<*, Double>): SpendRangeConfig {
+    val nonZeroSpends = dailyTotals.values.filter { it > 0.0 }.sorted()
+    if (nonZeroSpends.isEmpty()) {
+        return SpendRangeConfig(lowThreshold = 500.0, highThreshold = 2000.0)
+    }
+
+    val median = nonZeroSpends[nonZeroSpends.size / 2]
+    // Outlier dampening: cap values that exceed 20x median so single giant transactions don't skew the average
+    val maxReasonableMultiplier = 20.0
+    val effectiveSpends = if (median > 0.0 && nonZeroSpends.last() > median * maxReasonableMultiplier) {
+        val cap = median * maxReasonableMultiplier
+        nonZeroSpends.map { if (it > cap) cap else it }
+    } else {
+        nonZeroSpends
+    }
+
+    val effectiveAverage = effectiveSpends.average()
+
+    // Moderate range is 50% to 150% of effective daily average spend
+    val rawLow = effectiveAverage * 0.50
+    val rawHigh = effectiveAverage * 1.50
+
+    val finalHigh = if (rawHigh <= rawLow) rawLow * 1.5 + 10.0 else rawHigh
+    return SpendRangeConfig(
+        lowThreshold = rawLow,
+        highThreshold = finalHigh
+    )
+}

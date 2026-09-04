@@ -17,7 +17,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,8 +31,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.monday.ui.modern.ModernColors as C
 import com.example.monday.TodoViewModel
 
 // Helper function to parse categories from expense text
@@ -81,59 +87,91 @@ fun ExpenseActions(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp, horizontal = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable(onClick = onSelectAllClick)
+        ) {
             Checkbox(
                 checked = masterCheckboxState,
-                onCheckedChange = onMasterCheckboxChange
+                onCheckedChange = onMasterCheckboxChange,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = C.DateSelected,
+                    checkmarkColor = Color.White,
+                    uncheckedColor = C.CardBorder
+                )
             )
             Text(
                 text = if (masterCheckboxState && !isItemsListEmpty) "Deselect All" else "Select All",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier
-                    .clickable(onClick = onSelectAllClick)
-                    .padding(start = 4.dp, end = 8.dp)
+                color = C.EggnogDark,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 2.dp, end = 8.dp)
             )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (isUndoEnabled) {
-                IconButton(onClick = onUndoClick) {
-                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo Delete")
+                IconButton(
+                    onClick = onUndoClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Undo,
+                        contentDescription = "Undo Delete",
+                        tint = C.TodayButton,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
             
             // Only show categories button when items are selected (checked)
             if (isDeleteEnabled) {
                 if (isUndoEnabled) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
-                IconButton(onClick = { showCategoryDialog = true }) {
+                IconButton(
+                    onClick = { showCategoryDialog = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(
                         Icons.Outlined.Category,
                         contentDescription = "Assign Categories",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = C.Utilities,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
                 
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = onDeleteSelectedClick) {
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = onDeleteSelectedClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = "Delete Selected Items",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = C.Destructive,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
             
             if (!isItemsListEmpty) {
                 if (isUndoEnabled || isDeleteEnabled) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
-                IconButton(onClick = onDeleteAllClick) {
-                    Icon(Icons.Filled.DeleteSweep, contentDescription = "Delete All Expenses")
+                IconButton(
+                    onClick = onDeleteAllClick,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.DeleteSweep,
+                        contentDescription = "Delete All Expenses",
+                        tint = C.Destructive.copy(alpha = 0.75f),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }

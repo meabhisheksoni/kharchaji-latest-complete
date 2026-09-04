@@ -152,6 +152,9 @@ class StatsViewModel @Inject constructor(
     suspend fun getMasterRecordTotalsForMonth(yearMonth: YearMonth): Map<String, Double> =
         masterRecordManager.getMasterRecordTotalsForMonth(yearMonth)
 
+    suspend fun getMasterRecordDailyTotalsForMonth(yearMonth: YearMonth): Map<String, Double> =
+        masterRecordManager.getMasterRecordDailyTotalsForMonth(yearMonth)
+
     fun calculateMasterRecordTotals(records: List<CalculationRecord>): Map<String, Double> =
         masterRecordManager.calculateMasterRecordTotals(records)
 

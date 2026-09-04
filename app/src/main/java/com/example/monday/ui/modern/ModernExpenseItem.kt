@@ -10,11 +10,13 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,7 +113,7 @@ fun ModernExpenseItem(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
             .onSizeChanged { cardWidthPx = it.width.toFloat().coerceAtLeast(1f) }
     ) {
         // Background layer (edit / delete icons)
@@ -124,7 +126,7 @@ fun ModernExpenseItem(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(bgColor)
                 .padding(horizontal = 24.dp),
             contentAlignment = if (currentOffset > 0) Alignment.CenterStart else Alignment.CenterEnd
@@ -137,15 +139,19 @@ fun ModernExpenseItem(
         }
 
         // Foreground card
+        val isSelected = item.isDone
         Column(
             modifier = Modifier
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .fillMaxWidth()
-                .background(Color.White, RoundedCornerShape(18.dp))
+                .background(
+                    if (isSelected) Color(0xFFFCFAF5) else Color.White,
+                    RoundedCornerShape(16.dp)
+                )
                 .border(
-                    width = 0.5.dp,
-                    color = Color(0xFFE8E4DF),
-                    shape = RoundedCornerShape(18.dp)
+                    width = if (isSelected) 1.dp else 0.75.dp,
+                    color = if (isSelected) C.DateSelected.copy(alpha = 0.45f) else Color(0xFFE5E0D8),
+                    shape = RoundedCornerShape(16.dp)
                 )
                 .pointerInput(item.id) {
                     detectHorizontalDragGestures(
@@ -246,46 +252,56 @@ fun ModernExpenseItem(
                 // Price — bold, slightly larger
                 Text(
                     text = "₹${formatIndianCurrency(price.toInt())}",
-                    color = Color(0xFF1A1A1A),
-                    fontSize = 18.sp,
+                    color = if (isSelected) C.EggnogDark else Color(0xFF1A1A1A),
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.3).sp
                 )
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(4.dp))
 
-                // Small circle toggle (replaces checkbox)
+                // Circle toggle with accessible 44dp touch target
                 Box(
                     modifier = Modifier
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (item.isDone) catColor else Color.Transparent
-                        )
-                        .border(
-                            width = if (item.isDone) 0.dp else 1.5.dp,
-                            color = if (item.isDone) Color.Transparent else Color(0xFFD1D1D6),
-                            shape = CircleShape
-                        )
-                        .clickable { onCheckedChange(!item.isDone) },
+                        .size(44.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = false, radius = 20.dp)
+                        ) { onCheckedChange(!item.isDone) },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (item.isDone) {
-                        Text("✓", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (item.isDone) catColor else Color.Transparent
+                            )
+                            .border(
+                                width = if (item.isDone) 0.dp else 1.5.dp,
+                                color = if (item.isDone) Color.Transparent else Color(0xFFC7C3BC),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (item.isDone) {
+                            Text("✓", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
 
-            // Tag pills — outline style with colored text
+            // Tag pills — tinted pill style
             if (categories.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     categories.take(3).forEach { catLabel ->
                         val tagColor = C.categoryColors[catLabel] ?: catColor
                         Box(
                             modifier = Modifier
-                                .border(1.dp, tagColor.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .background(tagColor.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                                .border(1.dp, tagColor.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
                                 text = catLabel,

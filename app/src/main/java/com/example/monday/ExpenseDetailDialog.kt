@@ -1,4 +1,4 @@
-﻿package com.example.monday
+package com.example.monday
 import com.example.monday.core.utils.*
 import com.example.monday.data.models.TodoItem
 
@@ -197,11 +197,21 @@ private fun computeDialogData(
             }
         }
     } else {
-        // Union case
+        // Union or Unfiltered case
         val totalMonthlyExpense = items.sumOf { parsePrice(it.text) }
         val unionTotals = mutableMapOf<String, Double>()
         items.forEach { item ->
-            val category = parseCategoryInfo(item.text).second.firstOrNull { it in selectedCategories } ?: return@forEach
+            val parsedCats = parseCategoryInfo(item.text).second
+            val category = if (selectedCategories.isEmpty()) {
+                if (parsedCats.isEmpty()) {
+                    "Uncategorized"
+                } else {
+                    val (p, s, t) = intelligentlyCategorize(parsedCats.toSet())
+                    p.firstOrNull() ?: s.firstOrNull() ?: t.firstOrNull() ?: parsedCats.first()
+                }
+            } else {
+                parsedCats.firstOrNull { it in selectedCategories } ?: return@forEach
+            }
             unionTotals[category] = unionTotals.getOrDefault(category, 0.0) + parsePrice(item.text)
         }
 
@@ -219,7 +229,7 @@ private fun computeDialogData(
                 tertiaryCategories = tertiaryCategories,
                 percentage = percentage,
                 amount = amount,
-                color = categoryColors[category] ?: Color.Unspecified,
+                color = categoryColors[category] ?: Color.Gray,
                 isIntersection = false
             )
         }

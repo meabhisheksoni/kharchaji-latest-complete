@@ -118,8 +118,8 @@ fun MonthlyCumulativeChart(
     Box(
         modifier = Modifier
             .then(if (isCompact) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
-            .background(C.SoftCream, RoundedCornerShape(12.dp))
-            .border(1.dp, C.CardBorder, RoundedCornerShape(12.dp))
+            .background(C.SoftCream, RoundedCornerShape(14.dp))
+            .border(1.dp, C.CardBorder, RoundedCornerShape(14.dp))
             .then(
                 if (isCompact) Modifier.padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 8.dp)
                 else Modifier.padding(14.dp)
@@ -137,10 +137,10 @@ fun MonthlyCumulativeChart(
             ) {
                 Text(
                     if (isCompact) "Monthly Spending" else "$monthTitle Spending",
-                    color = C.EggnogDark.copy(alpha = 0.7f),
+                    color = C.EggnogDark.copy(alpha = 0.85f),
                     fontSize = if (isCompact) 11.sp else 12.sp,
                     fontWeight = if (isCompact) FontWeight.Bold else FontWeight.SemiBold,
-                    letterSpacing = 0.4.sp
+                    letterSpacing = 0.3.sp
                 )
                 Box(
                     modifier = Modifier

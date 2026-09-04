@@ -15,8 +15,8 @@ class NotificationMonitorService : NotificationListenerService() {
     // Regex to capture amounts like Rs 500, Rs. 500.50, INR 500, ₹500
     private val amountRegex = Regex("(?:Rs\\.?|INR|₹)\\s*([0-9,]+(?:\\.[0-9]{1,2})?)", RegexOption.IGNORE_CASE)
     
-    // Keywords indicating a debit/credit transaction
-    private val transactionKeywords = listOf("debited", "credited", "spent", "paid", "sent", "deducted")
+    // Keywords indicating a debit transaction as requested
+    private val transactionKeywords = listOf("debited")
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
@@ -29,11 +29,15 @@ class NotificationMonitorService : NotificationListenerService() {
         val notification = sbn.notification
         val extras = notification.extras
         
-        val title = extras.getString(android.app.Notification.EXTRA_TITLE) ?: ""
-        val text = extras.getString(android.app.Notification.EXTRA_TEXT) ?: ""
-        val bigText = extras.getString(android.app.Notification.EXTRA_BIG_TEXT) ?: ""
+        val title = extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() ?: ""
+        val text = extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() ?: ""
+        val bigText = extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+        
+        // Handle InboxStyle / Grouped Notifications
+        val textLines = extras.getCharSequenceArray(android.app.Notification.EXTRA_TEXT_LINES)
+        val linesText = textLines?.joinToString(" ") { it.toString() } ?: ""
 
-        val fullText = "$title $text $bigText"
+        val fullText = "$title $text $bigText $linesText"
 
         if (isTransactionMessage(fullText)) {
             val amountMatch = amountRegex.find(fullText)
@@ -56,7 +60,7 @@ class NotificationMonitorService : NotificationListenerService() {
                     }
                     
                     Log.d("Kharchaji_Notif", "Detected transaction of amount: $amount")
-                    triggerExpenseOverlay(amount)
+                    triggerForcedExpensePopup(amount)
                 }
             }
         }
@@ -67,31 +71,33 @@ class NotificationMonitorService : NotificationListenerService() {
         return transactionKeywords.any { lowerText.contains(it) } && amountRegex.containsMatchIn(text)
     }
 
-    private fun triggerExpenseOverlay(amount: String) {
-        val overlayIntent = Intent(this, OverlayService::class.java).apply {
-            action = "ACTION_QUICK_ADD_PAYMENT"
-            putExtra("EXTRA_AMOUNT", amount)
-            // Use a generic ref for SMS/notifications since we might not have a clean UPI ref
-            putExtra("EXTRA_REF", "NOTIF_${System.currentTimeMillis()}")
-        }
-
+    private fun triggerForcedExpensePopup(amount: String) {
+        // 1. Vibrate device
         try {
+            val vibrator = getSystemService(android.content.Context.VIBRATOR_SERVICE) as android.os.Vibrator
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(overlayIntent)
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot(500, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
             } else {
-                startService(overlayIntent)
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(500)
             }
         } catch (e: Exception) {
-            try {
-                val activityIntent = Intent(this, WidgetInputActivity::class.java).apply {
-                    putExtra("field", "item_name")
-                    putExtra("prefill_amount", amount.replace(",", ""))
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                }
-                startActivity(activityIntent)
-            } catch (e2: Exception) {
-                Log.e("Kharchaji_Notif", "Cannot launch any UI", e2)
+            Log.e("Kharchaji_Notif", "Vibration failed", e)
+        }
+
+        // 2. Launch WidgetInputActivity directly in forced mode
+        try {
+            val activityIntent = Intent(this, WidgetInputActivity::class.java).apply {
+                putExtra("field", "item_name")
+                putExtra("prefill_amount", amount.replace(",", ""))
+                putExtra("isForced", true) // Our new flag
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or 
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
+            startActivity(activityIntent)
+        } catch (e: Exception) {
+            Log.e("Kharchaji_Notif", "Cannot launch forced UI", e)
         }
     }
 }

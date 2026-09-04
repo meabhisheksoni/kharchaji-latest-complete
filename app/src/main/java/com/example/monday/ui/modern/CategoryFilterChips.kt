@@ -23,7 +23,7 @@ fun CategoryFilterChips(categories: List<String>) {
     LazyRow(
         modifier = Modifier.padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(horizontal = 20.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp)
     ) {
         // Rainbow "All" chip
         item {

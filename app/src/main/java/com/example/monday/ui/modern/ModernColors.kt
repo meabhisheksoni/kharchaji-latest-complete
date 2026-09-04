@@ -31,6 +31,9 @@ object ModernColors {
     // Card & borders
     val CardBorder = Color(0xFFC2BEB7)
 
+    // Text & labels
+    val TextMuted = Color(0xFF757575)
+
     // Drawer specific colors
     val DrawerHeaderBrown = Color(0xFF8B5E41)
     val DrawerSignOutPink = Color(0xFFFF5C77)

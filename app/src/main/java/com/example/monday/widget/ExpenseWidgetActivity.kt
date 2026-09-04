@@ -1,4 +1,4 @@
-﻿package com.example.monday.widget
+package com.example.monday.widget
 import com.example.monday.core.utils.*
 import com.example.monday.data.models.TodoItem
 import com.example.monday.data.local.TodoDao
@@ -85,11 +85,11 @@ class ExpenseWidgetActivity : ComponentActivity() {
                     database.todoDao().insert(newItem)
                 }
                 
-                Toast.makeText(this@ExpenseWidgetActivity, "Expense added!", Toast.LENGTH_SHORT).show()
+                com.example.monday.core.utils.CompactToast.show(this@ExpenseWidgetActivity, "Expense added!")
                 finish()
                 
             } catch (e: Exception) {
-                Toast.makeText(this@ExpenseWidgetActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                com.example.monday.core.utils.CompactToast.show(this@ExpenseWidgetActivity, "Error: ${e.message}")
             }
         }
     }

@@ -29,8 +29,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.Month
@@ -63,45 +65,49 @@ fun MonthlyReportScreen(
         mutableStateOf(generateCategoryColors(allCategories.toList()))
     }
 
-    // State to hold master record data by month
-    var masterRecordsByMonth by remember { mutableStateOf<Map<YearMonth, Map<String, Double>>>(emptyMap()) }
-    // New state to hold the actual master records for detail dialog
-    var masterRecordsForDialog by remember { mutableStateOf<Map<YearMonth, List<CalculationRecord>>>(emptyMap()) }
-    var isLoading by remember { mutableStateOf(true) }
-    
-    // Load master record data for the selected year
-    LaunchedEffect(selectedYear) {
-        isLoading = true
-        
-        // Single batch database query for the entire year to prevent N+1 queries
-        val startOfYearMillis = YearMonth.of(selectedYear, 1).atDay(1)
-            .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val endOfYearMillis = YearMonth.of(selectedYear, 12).atEndOfMonth()
-            .plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
-            
-        val allYearMasterRecords = statsViewModel.getMasterRecordsForMonth(startOfYearMillis, endOfYearMillis)
-        
-        // Group by YearMonth in memory
-        val groupedRecords = allYearMasterRecords.groupBy { record -> 
-            YearMonth.from(Instant.ofEpochMilli(record.recordDate).atZone(ZoneId.systemDefault()))
+    // Live reactive binding to avoid blocking the main UI thread during year aggregation
+    val allRecords by statsViewModel.allCalculationRecords.collectAsState()
+
+    val yearDataState by produceState(
+        initialValue = Pair(
+            emptyMap<YearMonth, Map<String, Double>>(),
+            emptyMap<YearMonth, List<CalculationRecord>>()
+        ),
+        key1 = allRecords,
+        key2 = selectedYear
+    ) {
+        withContext(Dispatchers.Default) {
+            val startOfYearMillis = YearMonth.of(selectedYear, 1).atDay(1)
+                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val endOfYearMillis = YearMonth.of(selectedYear, 12).atEndOfMonth()
+                .plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
+
+            val allYearMasterRecords = allRecords.filter {
+                it.isMasterSave && it.recordDate in startOfYearMillis..endOfYearMillis
+            }
+
+            val groupedRecords = allYearMasterRecords.groupBy { record ->
+                YearMonth.from(Instant.ofEpochMilli(record.recordDate).atZone(ZoneId.systemDefault()))
+            }
+
+            val yearData = mutableMapOf<YearMonth, Map<String, Double>>()
+            val recordsData = mutableMapOf<YearMonth, List<CalculationRecord>>()
+
+            for (month in 1..12) {
+                val yearMonth = YearMonth.of(selectedYear, month)
+                val monthRecords = groupedRecords[yearMonth] ?: emptyList()
+
+                recordsData[yearMonth] = monthRecords
+                yearData[yearMonth] = statsViewModel.calculateMasterRecordTotals(monthRecords)
+            }
+
+            value = Pair(yearData, recordsData)
         }
-        
-        val yearData = mutableMapOf<YearMonth, Map<String, Double>>()
-        val recordsData = mutableMapOf<YearMonth, List<CalculationRecord>>()
-        
-        // Populate all 12 months so the UI grid doesn't break
-        for (month in 1..12) {
-            val yearMonth = YearMonth.of(selectedYear, month)
-            val monthRecords = groupedRecords[yearMonth] ?: emptyList()
-            
-            recordsData[yearMonth] = monthRecords
-            yearData[yearMonth] = statsViewModel.calculateMasterRecordTotals(monthRecords)
-        }
-        
-        masterRecordsByMonth = yearData
-        masterRecordsForDialog = recordsData
-        isLoading = false
     }
+
+    val masterRecordsByMonth = yearDataState.first
+    val masterRecordsForDialog = yearDataState.second
+    val isLoading = false
 
     // Calculate filtered monthly expenses based on selected categories
     val filteredMonthlyExpenses = remember(masterRecordsByMonth, selectedCategories) {

@@ -145,7 +145,7 @@ fun ModernDateNavigation(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -164,27 +164,27 @@ fun ModernDateNavigation(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = selectedDate.dayOfWeek.getDisplayName(JavaTextStyle.SHORT, Locale.ENGLISH),
-                    color = C.EggnogLight, fontSize = 12.sp, fontWeight = FontWeight.Medium
+                    color = C.EggnogDark.copy(alpha = 0.75f), fontSize = 12.sp, fontWeight = FontWeight.Medium
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 // Prev day
                 Box(
                     modifier = Modifier.size(34.dp)
-                        .background(C.SoftCream, RoundedCornerShape(12.dp))
-                        .border(1.dp, C.EggnogLight, RoundedCornerShape(12.dp))
+                        .background(C.SoftCream, RoundedCornerShape(10.dp))
+                        .border(1.dp, C.CardBorder, RoundedCornerShape(10.dp))
                         .clickable {
                             isProgrammaticDateChange = true
                             onDateChange(selectedDate.minusDays(1))
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBackIos, "Prev", tint = C.EggnogDark, modifier = Modifier.size(14.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBackIos, "Prev", tint = C.EggnogDark, modifier = Modifier.size(13.dp))
                 }
                 // Today button
                 Box(
                     modifier = Modifier.height(34.dp)
-                        .background(C.TodayButton, RoundedCornerShape(12.dp))
+                        .background(C.TodayButton, RoundedCornerShape(10.dp))
                         .clickable {
                             isProgrammaticDateChange = true
                             onDateChange(today)
@@ -197,15 +197,15 @@ fun ModernDateNavigation(
                 // Next day
                 Box(
                     modifier = Modifier.size(34.dp)
-                        .background(C.SoftCream, RoundedCornerShape(12.dp))
-                        .border(1.dp, C.EggnogLight, RoundedCornerShape(12.dp))
+                        .background(C.SoftCream, RoundedCornerShape(10.dp))
+                        .border(1.dp, C.CardBorder, RoundedCornerShape(10.dp))
                         .clickable {
                             isProgrammaticDateChange = true
                             onDateChange(selectedDate.plusDays(1))
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, "Next", tint = C.EggnogDark, modifier = Modifier.size(14.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, "Next", tint = C.EggnogDark, modifier = Modifier.size(13.dp))
                 }
             }
         }

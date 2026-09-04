@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -68,6 +69,7 @@ class WidgetInputActivity : ComponentActivity() {
     private var currentStep by mutableStateOf("item_name")
     private var itemNameValue by mutableStateOf("")
     private var priceValue by mutableStateOf("")
+    private var prefillNameValue by mutableStateOf("")
     private var prefillAmountValue by mutableStateOf("")
     // Counter to force-reset composable state when saving in manual mode
     private var resetCounter by mutableStateOf(0)
@@ -78,12 +80,31 @@ class WidgetInputActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        val isForced = intent.getBooleanExtra("isForced", false)
+
+        if (isForced) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true)
+                setTurnScreenOn(true)
+                val keyguardManager = getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+                keyguardManager.requestDismissKeyguard(this, null)
+            } else {
+                @Suppress("DEPRECATION")
+                window.addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                )
+            }
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+
         // Make keyboard appear without shifting dialog
         window.setSoftInputMode(
             android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or
             android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
         )
         
+        prefillNameValue = intent.getStringExtra("prefill_name") ?: ""
         prefillAmountValue = intent.getStringExtra("prefill_amount") ?: ""
         // Always start on the merged name+price step
         currentStep = "name_and_price"
@@ -95,13 +116,21 @@ class WidgetInputActivity : ComponentActivity() {
                 savePriceAsync(applicationContext, prefillAmountValue)
             }
         }
+        if (prefillNameValue.isNotBlank()) {
+            itemNameValue = prefillNameValue
+            lifecycleScope.launch {
+                saveItemName(applicationContext, prefillNameValue)
+            }
+        }
 
         setContent {
             val uniqueNames by mainViewModel.uniqueItemNames.collectAsState()
             KharchajiTheme {
                 ChainedInputDialog(
                     currentStep = currentStep,
+                    prefillName = prefillNameValue,
                     prefillAmount = prefillAmountValue,
+                    isForced = isForced,
                     resetKey = resetCounter,
                     uniqueNames = uniqueNames,
                     onDismiss = { _, _ ->
@@ -112,7 +141,7 @@ class WidgetInputActivity : ComponentActivity() {
                         // 1. Validate Synchronously
                         val priceDouble = price.toDoubleOrNull()
                         if (priceDouble == null || priceDouble <= 0) {
-                            android.widget.Toast.makeText(this@WidgetInputActivity, "Please enter a valid price", android.widget.Toast.LENGTH_SHORT).show()
+                            com.example.monday.core.utils.CompactToast.show(this@WidgetInputActivity, "Please enter a valid price")
                             return@ChainedInputDialog
                         }
 
@@ -132,7 +161,7 @@ class WidgetInputActivity : ComponentActivity() {
                         }
                         
                         // 4. Instant UI Feedback and Teardown
-                        android.widget.Toast.makeText(this@WidgetInputActivity, "Expense saved!", android.widget.Toast.LENGTH_SHORT).show()
+                        com.example.monday.core.utils.CompactToast.show(this@WidgetInputActivity, "$name - ₹$price saved")
                         if (prefillAmountValue.isNotBlank()) {
                             finish()
                         } else {
@@ -299,15 +328,17 @@ class WidgetInputActivity : ComponentActivity() {
 @Composable
 fun ChainedInputDialog(
     currentStep: String,
+    prefillName: String = "",
     prefillAmount: String = "",
+    isForced: Boolean = false,
     resetKey: Int = 0,
     uniqueNames: List<String> = emptyList(),
     onDismiss: (String, String) -> Unit,
     onSave: (name: String, price: String, qty: String, unit: String) -> Unit
 ) {
     val isPrefilled = prefillAmount.isNotBlank()
-    var itemName by remember(currentStep, prefillAmount, resetKey) { mutableStateOf("") }
-    var price by remember(currentStep, prefillAmount, resetKey) { mutableStateOf(if (isPrefilled) prefillAmount else "") }
+    var itemName by remember(currentStep, prefillName, prefillAmount, resetKey) { mutableStateOf(prefillName) }
+    var price by remember(currentStep, prefillName, prefillAmount, resetKey) { mutableStateOf(prefillAmount) }
     var customQty by remember(currentStep, resetKey) { mutableStateOf("") }
     var selectedUnit by remember(currentStep, resetKey) { mutableStateOf("") }
     var selectedPresetTag by remember(currentStep, resetKey) { mutableStateOf("") }
@@ -319,6 +350,10 @@ fun ChainedInputDialog(
     val nameFocusRequester = remember { FocusRequester() }
     val priceFocusRequester = remember { FocusRequester() }
     val qtyFocusRequester = remember { FocusRequester() }
+    
+    androidx.activity.compose.BackHandler(enabled = isForced) {
+        // Intercept back press and do nothing when forced
+    }
     
     // startsWith filter so "M" only shows M-items; hide if exact match already selected
     val filteredNames = if (itemName.isBlank()) {
@@ -343,7 +378,7 @@ fun ChainedInputDialog(
                 else -> selectedPresetTag to "g"
             }
         }
-        // Custom qty â€” save number even without a unit (implies pcs/count)
+        // Custom qty — save number even without a unit (implies pcs/count)
         if (customQty.isNotBlank()) {
             return customQty to selectedUnit
         }
@@ -358,9 +393,15 @@ fun ChainedInputDialog(
         }
     }
 
-    // Auto-focus item name on open
+    // Auto-focus on open
     LaunchedEffect(currentStep, resetKey) {
-        try { nameFocusRequester.requestFocus() } catch (_: Exception) {}
+        try {
+            if (itemName.isNotBlank() && price.isBlank()) {
+                priceFocusRequester.requestFocus()
+            } else {
+                nameFocusRequester.requestFocus()
+            }
+        } catch (_: Exception) {}
     }
 
     Box(
@@ -370,7 +411,7 @@ fun ChainedInputDialog(
             .clickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = null,
-                onClick = { onDismiss(currentStep, "") }
+                onClick = { if (!isForced) onDismiss(currentStep, "") }
             ),
         contentAlignment = Alignment.TopCenter
     ) {
@@ -393,11 +434,67 @@ fun ChainedInputDialog(
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Add Expense",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // ── Header with "Add Expense" title and direct "Open App" navigation shortcut ──
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    fun launchMainApp() {
+                        val mainIntent = android.content.Intent(context, com.example.monday.MainActivity::class.java).apply {
+                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        }
+                        context.startActivity(mainIntent)
+                        (context as? android.app.Activity)?.finish()
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .clickable { launchMainApp() }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Add Expense",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "↗",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Direct shortcut badge button to open full app
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        modifier = Modifier.clickable { launchMainApp() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "Open App",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "➔",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
 
                 // Input fields
                 Column(
@@ -422,6 +519,23 @@ fun ChainedInputDialog(
                             },
                             onDone = { doSave() }
                         ),
+                        trailingIcon = {
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            IconButton(
+                                onClick = {
+                                    val intent = android.content.Intent(context, com.example.monday.ui.voice.VoiceExpenseActivity::class.java).apply {
+                                        flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Mic,
+                                    contentDescription = "Voice Input",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -468,13 +582,13 @@ fun ChainedInputDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Price field â€” Indian comma formatting
+                    // Price field — Indian comma formatting
                     OutlinedTextField(
                         value = price,
                         onValueChange = { newVal ->
-                            if (!isPrefilled) {
-                                // Only allow digits and one decimal point
-                                val filtered = newVal.filter { it.isDigit() || it == '.' }
+                            // Always allow editing digits and decimal
+                            val filtered = newVal.filter { it.isDigit() || it == '.' }
+                            if (filtered.count { it == '.' } <= 1) {
                                 price = filtered
                             }
                         },
@@ -489,7 +603,7 @@ fun ChainedInputDialog(
                         keyboardActions = KeyboardActions(
                             onDone = { doSave() }
                         ),
-                        readOnly = isPrefilled,
+                        readOnly = false,
                         singleLine = true,
                         modifier = Modifier
                             .weight(1f)
@@ -567,15 +681,17 @@ fun ChainedInputDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Cross â€” cancel (plain grey icon)
-                    IconButton(
-                        onClick = { onDismiss(currentStep, "") },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Cancel",
-                            tint = Color.Gray
-                        )
+                    if (!isForced) {
+                        IconButton(
+                            onClick = { onDismiss(currentStep, "") },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Cancel",
+                                tint = Color.Gray
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))

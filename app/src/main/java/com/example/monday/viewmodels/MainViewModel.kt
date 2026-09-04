@@ -80,6 +80,7 @@ class MainViewModel @Inject constructor(
                     _todoItems.value = items.sortedBy { it.id }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e("KharchaJi", "Error collecting todo items", e)
                 _todoItems.value = emptyList()
             }
@@ -325,6 +326,7 @@ class MainViewModel @Inject constructor(
                     _currentDateUndoItems.value = items
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e("KharchaJi", "Error collecting undo items", e)
                 _currentDateUndoItems.value = emptyList()
             }

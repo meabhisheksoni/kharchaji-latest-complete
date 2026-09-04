@@ -20,10 +20,6 @@ class ExportViewModel @Inject constructor(
     private val prefManager: PreferenceManager
 ) : ViewModel() {
 
-    init {
-        loadAndCleanupHistory()
-    }
-
     // ── Cross-Date Export Buffer ──────────────────────────────────────
     // Survives config changes (lives in ViewModel). Caps at 200 items to prevent unbounded memory growth.
     private val _exportBuffer = MutableStateFlow<Map<LocalDate, List<TodoItem>>>(emptyMap())
@@ -31,6 +27,15 @@ class ExportViewModel @Inject constructor(
     val exportBufferCount: StateFlow<Int> = _exportBuffer
         .map { buf -> buf.values.sumOf { it.size } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    // ── Export History ───────────────────────────────────────────────
+    private val _exportHistory = MutableStateFlow<List<ExportHistoryItem>>(emptyList())
+    val exportHistory: StateFlow<List<ExportHistoryItem>> = _exportHistory
+
+    init {
+        // Run AFTER all MutableStateFlow properties have been initialized
+        loadAndCleanupHistory()
+    }
 
     fun addToExportBuffer(date: LocalDate, items: List<TodoItem>) {
         if (items.isEmpty()) return
@@ -69,10 +74,6 @@ class ExportViewModel @Inject constructor(
         }
     }
 
-    // ── Export History ───────────────────────────────────────────────
-    private val _exportHistory = MutableStateFlow<List<ExportHistoryItem>>(emptyList())
-    val exportHistory: StateFlow<List<ExportHistoryItem>> = _exportHistory
-
     fun addExportToHistory(id: String, filePath: String, totalSum: Double, itemCount: Int, type: String, items: List<String>) {
         val newItem = ExportHistoryItem(
             id = id,
@@ -103,25 +104,27 @@ class ExportViewModel @Inject constructor(
         }
         prefManager.saveExportHistory(_exportHistory.value)
         viewModelScope.launch(Dispatchers.IO) {
-            try { File(item.filePath).delete() } catch (e: Exception) {}
+            try { File(item.filePath).delete() } catch (_: Exception) {}
         }
     }
 
     private fun loadAndCleanupHistory() {
         viewModelScope.launch(Dispatchers.IO) {
-            val history = prefManager.getExportHistory()
-            val now = System.currentTimeMillis()
-            val twoDaysMillis = 48 * 60 * 60 * 1000L
-            val validHistory = history.filter { item ->
-                val isValid = item.isPinned || (now - item.timestamp) < twoDaysMillis
-                if (!isValid) {
-                    // Try to delete the orphaned file if it's expired and not pinned
-                    try { File(item.filePath).delete() } catch (e: Exception) {}
+            try {
+                val history = prefManager.getExportHistory()
+                val now = System.currentTimeMillis()
+                val twoDaysMillis = 48 * 60 * 60 * 1000L
+                val validHistory = history.filter { item ->
+                    val isValid = item.isPinned || (now - item.timestamp) < twoDaysMillis
+                    if (!isValid) {
+                        // Try to delete the orphaned file if it's expired and not pinned
+                        try { File(item.filePath).delete() } catch (_: Exception) {}
+                    }
+                    isValid
                 }
-                isValid
-            }
-            _exportHistory.value = validHistory
-            prefManager.saveExportHistory(validHistory)
+                _exportHistory.value = validHistory
+                prefManager.saveExportHistory(validHistory)
+            } catch (_: Exception) {}
         }
     }
 }

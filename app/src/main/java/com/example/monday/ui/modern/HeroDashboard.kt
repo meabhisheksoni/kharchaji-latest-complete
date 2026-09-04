@@ -8,18 +8,27 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.outlined.LocalOffer
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -62,19 +71,28 @@ fun HeroDashboard(
         FontFamily(Font(R.font.satoshi_bold, FontWeight.Bold))
     }
 
-    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         // AI Insight Chip
         Box(
             modifier = Modifier
                 .background(C.ChipBg, RoundedCornerShape(50))
                 .border(1.dp, C.ChipBorder, RoundedCornerShape(50))
-                .padding(horizontal = 14.dp, vertical = 6.dp)
+                .padding(horizontal = 12.dp, vertical = 5.dp)
         ) {
-            Text(
-                text = "✨ ${if (isToday) "Today's Overview" else "Past Overview"} · Top: $topCategory",
-                color = C.ChipText, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 0.4.sp
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = C.ChipText,
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "${if (isToday) "Today's Overview" else "Past Overview"} · Top: $topCategory",
+                    color = C.ChipText, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.4.sp
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -92,13 +110,18 @@ fun HeroDashboard(
 
         // Label row + comparison badge
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = displayLabel, color = C.EggnogDark, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(
+                text = displayLabel,
+                color = C.EggnogDark,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
             Spacer(modifier = Modifier.width(8.dp))
             Box(
                 modifier = Modifier
                     .background(C.Groceries.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
                     .border(1.dp, C.Groceries.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                .padding(horizontal = 7.dp, vertical = 2.dp)
             ) {
                 Text(text = "↓ vs ₹524 avg", color = C.Groceries, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
@@ -106,12 +129,30 @@ fun HeroDashboard(
 
         // Daily Budget progress bar
         Spacer(modifier = Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Daily Budget", color = C.EggnogDark.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        val isBudgetExceeded = progressPercent > 100
+        val isBudgetWarning = progressPercent > 80 && !isBudgetExceeded
+        val budgetProgressColor = when {
+            isBudgetExceeded -> C.Destructive
+            isBudgetWarning -> Color(0xFFD97706) // Warning amber
+            else -> C.Groceries
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Daily Budget",
+                color = C.EggnogDark.copy(alpha = 0.85f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
             Text(
                 text = "₹${formatIndianCurrency(totalSum.toInt())} / ₹${formatIndianCurrency(budgetLimit.toInt())}",
-                color = if (progressPercent > 80) C.Transport else C.EggnogDark,
-                fontSize = 11.sp, fontWeight = FontWeight.SemiBold
+                color = when {
+                    isBudgetExceeded -> C.Destructive
+                    isBudgetWarning -> Color(0xFFD97706)
+                    else -> C.EggnogDark
+                },
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
             )
         }
         Spacer(modifier = Modifier.height(6.dp))
@@ -121,12 +162,18 @@ fun HeroDashboard(
             animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
             label = "progress"
         )
-        Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(C.SoftCream, RoundedCornerShape(50))) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .background(C.SoftCream, RoundedCornerShape(50))
+                .border(0.5.dp, C.CardBorder.copy(alpha = 0.5f), RoundedCornerShape(50))
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(animatedProgress)
                     .fillMaxHeight()
-                    .background(if (progressPercent > 80) C.Transport else C.Groceries, RoundedCornerShape(50))
+                    .background(budgetProgressColor, RoundedCornerShape(50))
             )
         }
 
@@ -193,18 +240,24 @@ fun HeroDashboard(
                 }
 
                 // Page indicator dots
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     repeat(3) { index ->
                         val isActive = pagerState.currentPage == index
+                        val dotWidth by animateDpAsState(
+                            targetValue = if (isActive) 16.dp else 6.dp,
+                            animationSpec = tween(durationMillis = 250),
+                            label = "pager_dot_$index"
+                        )
                         Box(
                             modifier = Modifier
-                                .padding(horizontal = 4.dp)
-                                .size(if (isActive) 8.dp else 6.dp)
-                                .clip(CircleShape)
+                                .padding(horizontal = 3.dp)
+                                .size(width = dotWidth, height = 6.dp)
+                                .clip(RoundedCornerShape(3.dp))
                                 .background(
                                     if (isActive) C.DateSelected
                                     else C.EggnogLight.copy(alpha = 0.5f)
@@ -222,10 +275,34 @@ fun HeroDashboard(
  */
 @Composable
 private fun StatCardsRow(totalItemsCount: Int, avgPerExpense: Double, topCategory: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        StatCard(Modifier.weight(1f), "📊", totalItemsCount.toString(), "Transactions", C.Utilities)
-        StatCard(Modifier.weight(1f), "📈", "₹${formatIndianCurrency(avgPerExpense.toInt())}", "Avg / Item", C.Transport)
-        StatCard(Modifier.weight(1f), "🏷️", topCategory.take(7), "Top Category", C.DateText)
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatCard(
+            modifier = Modifier.weight(1f),
+            icon = Icons.Outlined.ReceiptLong,
+            iconTint = C.Utilities,
+            iconBg = C.Utilities.copy(alpha = 0.12f),
+            value = totalItemsCount.toString(),
+            label = "Transactions",
+            valueColor = C.Utilities
+        )
+        StatCard(
+            modifier = Modifier.weight(1f),
+            icon = Icons.Outlined.TrendingUp,
+            iconTint = C.Transport,
+            iconBg = C.Transport.copy(alpha = 0.12f),
+            value = "₹${formatIndianCurrency(avgPerExpense.toInt())}",
+            label = "Avg / Item",
+            valueColor = C.Transport
+        )
+        StatCard(
+            modifier = Modifier.weight(1f),
+            icon = Icons.Outlined.LocalOffer,
+            iconTint = C.TodayButton,
+            iconBg = C.TodayButton.copy(alpha = 0.12f),
+            value = topCategory.take(7),
+            label = "Top Category",
+            valueColor = C.DateText
+        )
     }
 }
 
@@ -262,8 +339,8 @@ private fun DailySpendChart(
                 // Compact: fill pager height so card matches stat cards height
                 if (isCompact) Modifier.fillMaxSize() else Modifier.fillMaxWidth()
             )
-            .background(C.SoftCream, RoundedCornerShape(12.dp))
-            .border(1.dp, C.CardBorder, RoundedCornerShape(12.dp))
+            .background(C.SoftCream, RoundedCornerShape(14.dp))
+            .border(1.dp, C.CardBorder, RoundedCornerShape(14.dp))
             // Compact: tiny top padding to eliminate vacant space above title
             .then(
                 if (isCompact) Modifier.padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 8.dp)
@@ -275,14 +352,27 @@ private fun DailySpendChart(
         if (!hasAnyData) {
             // Empty state — no spend data at all
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("📊", fontSize = 24.sp)
-                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(C.Utilities.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Outlined.BarChart,
+                        contentDescription = null,
+                        tint = C.Utilities,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     "No spend data yet",
-                    color = C.EggnogDark.copy(alpha = 0.6f),
+                    color = C.EggnogDark.copy(alpha = 0.85f),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -296,11 +386,10 @@ private fun DailySpendChart(
                 ) {
                     Text(
                         "Last 7-days spending",
-                        color = C.EggnogDark.copy(alpha = 0.7f),
+                        color = C.EggnogDark.copy(alpha = 0.85f),
                         fontSize = if (isCompact) 11.sp else 12.sp,
                         fontWeight = if (isCompact) FontWeight.Bold else FontWeight.SemiBold,
-                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                        letterSpacing = 0.4.sp
+                        letterSpacing = 0.3.sp
                     )
 
                     if (hasAnyData || total7DaySpend > 0) {
@@ -420,19 +509,54 @@ private fun RowScope.ToggleTab(text: String, isActive: Boolean, onClick: () -> U
 }
 
 @Composable
-private fun StatCard(modifier: Modifier, icon: String, value: String, label: String, valueColor: androidx.compose.ui.graphics.Color) {
+private fun StatCard(
+    modifier: Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: androidx.compose.ui.graphics.Color,
+    iconBg: androidx.compose.ui.graphics.Color,
+    value: String,
+    label: String,
+    valueColor: androidx.compose.ui.graphics.Color
+) {
     Box(
         modifier = modifier
-            .background(C.SoftCream, RoundedCornerShape(12.dp))
-            .border(1.dp, C.CardBorder, RoundedCornerShape(12.dp))
+            .background(C.SoftCream, RoundedCornerShape(14.dp))
+            .border(1.dp, C.CardBorder, RoundedCornerShape(14.dp))
             .padding(12.dp)
     ) {
         Column {
-            Text(icon, fontSize = 16.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(value, color = valueColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(iconBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = iconTint,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = value,
+                color = valueColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             Spacer(modifier = Modifier.height(2.dp))
-            Text(label, color = C.EggnogDark.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+            Text(
+                text = label,
+                color = C.EggnogDark.copy(alpha = 0.85f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
